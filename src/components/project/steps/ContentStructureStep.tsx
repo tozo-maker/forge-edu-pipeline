@@ -136,9 +136,16 @@ const ContentStructureStep: React.FC<ContentStructureStepProps> = ({
   };
 
   const handleSubmit = (values: z.infer<typeof contentStructureSchema>) => {
+    // Here we ensure that the contentSections match required structure when submitting
+    const validSections = values.contentSections.map(section => ({
+      title: section.title || "Untitled Section",
+      description: section.description || "",
+      sequence: section.sequence
+    }));
+    
     onNext({
       organizationPattern: values.organizationPattern,
-      contentSections: values.contentSections,
+      contentSections: validSections,
       estimatedDuration: values.estimatedDuration,
     });
   };

@@ -93,8 +93,14 @@ const LearningObjectivesStep: React.FC<LearningObjectivesStepProps> = ({ data, o
   };
 
   const handleSubmit = (values: z.infer<typeof learningObjectivesSchema>) => {
+    // Ensure all objectives have required properties before submitting
+    const validObjectives = values.objectives.map(objective => ({
+      text: objective.text || "Learning Objective",
+      bloomsLevel: objective.bloomsLevel || "understand"
+    }));
+    
     onNext({
-      objectives: values.objectives
+      objectives: validObjectives
     });
   };
 
