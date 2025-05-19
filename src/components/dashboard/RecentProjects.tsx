@@ -11,19 +11,7 @@ import { Badge } from "@/components/ui/badge";
 import { PipelineStage } from "@/types/pipeline";
 import { formatDistanceToNow } from "date-fns";
 import { Link } from "react-router-dom";
-
-interface Project {
-  id: string;
-  title: string;
-  description: string;
-  currentStage: PipelineStage;
-  completionPercentage: number;
-  updated_at: string;
-}
-
-interface RecentProjectsProps {
-  projects: Project[];
-}
+import { useProjects } from "@/hooks/useProjects";
 
 const stageBadgeStyles = {
   project_config: "bg-blue-100 text-blue-800",
@@ -43,7 +31,9 @@ const stageNames = {
   validation: "Validation"
 };
 
-const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
+const RecentProjects: React.FC = () => {
+  const { projects, loading } = useProjects(5); // Limit to 5 recent projects
+
   return (
     <Card>
       <CardHeader>
@@ -53,7 +43,11 @@ const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {projects.length > 0 ? (
+        {loading ? (
+          <div className="text-center py-6">
+            <p className="text-gray-500">Loading projects...</p>
+          </div>
+        ) : projects.length > 0 ? (
           <div className="space-y-4">
             {projects.map((project) => (
               <Link 
@@ -70,10 +64,10 @@ const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
                     <Badge 
                       variant="secondary"
                       className={
-                        stageBadgeStyles[project.currentStage] || "bg-gray-100 text-gray-800"
+                        stageBadgeStyles[project.pipeline_status as PipelineStage] || "bg-gray-100 text-gray-800"
                       }
                     >
-                      {stageNames[project.currentStage]}
+                      {stageNames[project.pipeline_status as PipelineStage]}
                     </Badge>
                   </div>
                   <div className="mt-3 flex items-center justify-between">
@@ -81,7 +75,7 @@ const RecentProjects: React.FC<RecentProjectsProps> = ({ projects }) => {
                       Updated {formatDistanceToNow(new Date(project.updated_at))} ago
                     </div>
                     <div className="text-xs font-medium text-gray-700">
-                      {project.completionPercentage}% complete
+                      {project.completion_percentage}% complete
                     </div>
                   </div>
                 </div>

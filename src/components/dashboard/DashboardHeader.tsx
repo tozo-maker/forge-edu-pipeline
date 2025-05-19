@@ -11,19 +11,35 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Link } from "react-router-dom";
+import { Link, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
+import { useProfile } from "@/hooks/useProfile";
 
-interface DashboardHeaderProps {
-  userName: string;
-  userRole: string;
-}
+const DashboardHeader: React.FC = () => {
+  const { signOut } = useAuth();
+  const { profile, loading } = useProfile();
+  const navigate = useNavigate();
 
-const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userName, userRole }) => {
-  const userInitials = userName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .toUpperCase();
+  const userName = loading || !profile 
+    ? "User" 
+    : `${profile.first_name || ''} ${profile.last_name || ''}`.trim() || "User";
+  
+  const userRole = loading || !profile 
+    ? "Teacher" 
+    : profile.role === "instructional_designer" 
+      ? "Instructional Designer" 
+      : profile.role === "curriculum_developer" 
+        ? "Curriculum Developer" 
+        : "Teacher";
+
+  const userInitials = userName !== "User" 
+    ? userName.split(" ").map((n) => n[0]).join("").toUpperCase()
+    : "U";
+
+  const handleSignOut = async () => {
+    await signOut();
+    navigate("/");
+  };
 
   return (
     <header className="border-b border-gray-200 bg-white py-4 px-6">
@@ -77,8 +93,8 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userName, userRole })
                 <Link to="/settings" className="w-full">Settings</Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem>
-                <Link to="/" className="w-full">Log out</Link>
+              <DropdownMenuItem onClick={handleSignOut}>
+                Log out
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

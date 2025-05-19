@@ -11,21 +11,24 @@ import { Progress } from "@/components/ui/progress";
 import { ArrowRight } from "lucide-react";
 import { PIPELINE_STAGES } from "@/types/pipeline";
 import { Link } from "react-router-dom";
+import { useProjects } from "@/hooks/useProjects";
 
-interface ProjectProgress {
-  id: string;
-  title: string;
-  currentStage: number; // 1-6
-  completionPercentage: number;
-}
-
-interface PipelineOverviewProps {
-  projects: ProjectProgress[];
-}
-
-const PipelineOverview: React.FC<PipelineOverviewProps> = ({ projects }) => {
-  // Only show up to 3 projects in the overview
-  const displayedProjects = projects.slice(0, 3);
+const PipelineOverview: React.FC = () => {
+  const { projects, loading } = useProjects();
+  
+  // Calculate current stage index for each project
+  const projectsWithStageIndex = projects.map(project => {
+    const stageIndex = PIPELINE_STAGES.findIndex(stage => stage.id === project.pipeline_status);
+    return {
+      ...project,
+      currentStage: stageIndex >= 0 ? stageIndex + 1 : 1 // Default to stage 1 if not found
+    };
+  });
+  
+  // Sort by updated_at and take the first 3
+  const displayedProjects = projectsWithStageIndex
+    .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+    .slice(0, 3);
 
   return (
     <Card>
@@ -36,7 +39,11 @@ const PipelineOverview: React.FC<PipelineOverviewProps> = ({ projects }) => {
         </CardDescription>
       </CardHeader>
       <CardContent>
-        {displayedProjects.length > 0 ? (
+        {loading ? (
+          <div className="text-center py-6">
+            <p className="text-gray-500">Loading projects...</p>
+          </div>
+        ) : displayedProjects.length > 0 ? (
           <div className="space-y-6">
             {displayedProjects.map((project) => (
               <div key={project.id} className="space-y-2">
@@ -48,10 +55,10 @@ const PipelineOverview: React.FC<PipelineOverviewProps> = ({ projects }) => {
                     {project.title}
                   </Link>
                   <span className="text-sm text-gray-500">
-                    {project.completionPercentage}% complete
+                    {project.completion_percentage}% complete
                   </span>
                 </div>
-                <Progress value={project.completionPercentage} className="h-2" />
+                <Progress value={project.completion_percentage} className="h-2" />
                 <div className="flex justify-between items-center mt-2">
                   {PIPELINE_STAGES.map((stage, index) => (
                     <React.Fragment key={stage.id}>

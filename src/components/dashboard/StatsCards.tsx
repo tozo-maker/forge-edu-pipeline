@@ -5,18 +5,25 @@ import {
   Clock, 
   BarChart4 
 } from "lucide-react";
+import { useProjects } from "@/hooks/useProjects";
+import { useAuth } from "@/contexts/AuthContext";
 
-interface StatsCardsProps {
-  projectsCount: number;
-  contentGenerated: number;
-  timeSaved: number;
-}
+const StatsCards: React.FC = () => {
+  const { user } = useAuth();
+  const { projects, loading } = useProjects();
+  
+  const projectsCount = loading ? 0 : projects.length;
+  
+  // Calculate content generated (assume each project has 3 pages on average)
+  const contentGenerated = projectsCount * 3;
+  
+  // Calculate time saved (assume 1.5 hours saved per project)
+  const timeSaved = Math.round(projectsCount * 1.5);
 
-const StatsCards: React.FC<StatsCardsProps> = ({ 
-  projectsCount, 
-  contentGenerated, 
-  timeSaved 
-}) => {
+  if (!user) {
+    return null;
+  }
+
   return (
     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
       <div className="bg-white rounded-lg border border-gray-200 p-5 shadow-sm">

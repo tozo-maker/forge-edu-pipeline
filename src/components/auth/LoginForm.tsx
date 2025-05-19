@@ -15,6 +15,7 @@ import {
 import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -25,6 +26,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 const LoginForm: React.FC = () => {
   const navigate = useNavigate();
+  const { signIn, isLoading } = useAuth();
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -34,10 +36,8 @@ const LoginForm: React.FC = () => {
     },
   });
 
-  const onSubmit = (values: FormValues) => {
-    // This would normally connect to authentication service
-    console.log("Login submitted:", values);
-    toast.success("Login successful!");
+  const onSubmit = async (values: FormValues) => {
+    await signIn(values.email, values.password);
     navigate("/dashboard");
   };
 
@@ -78,7 +78,9 @@ const LoginForm: React.FC = () => {
             )}
           />
           
-          <Button type="submit" className="w-full">Sign In</Button>
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? "Signing in..." : "Sign In"}
+          </Button>
         </form>
       </Form>
       
