@@ -70,15 +70,15 @@ const DashboardHeader: React.FC<DashboardHeaderProps> = ({ userName, userRole })
                 </div>
               </DropdownMenuLabel>
               <DropdownMenuSeparator />
-              <DropdownMenuItem as={Link} to="/profile">
-                Profile
+              <DropdownMenuItem>
+                <Link to="/profile" className="w-full">Profile</Link>
               </DropdownMenuItem>
-              <DropdownMenuItem as={Link} to="/settings">
-                Settings
+              <DropdownMenuItem>
+                <Link to="/settings" className="w-full">Settings</Link>
               </DropdownMenuItem>
               <DropdownMenuSeparator />
-              <DropdownMenuItem as={Link} to="/">
-                Log out
+              <DropdownMenuItem>
+                <Link to="/" className="w-full">Log out</Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
