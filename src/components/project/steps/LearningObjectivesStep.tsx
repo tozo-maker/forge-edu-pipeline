@@ -54,10 +54,10 @@ type Objective = {
 };
 
 const LearningObjectivesStep: React.FC<LearningObjectivesStepProps> = ({ data, onNext, onBack }) => {
-  // Initialize objectives with proper defaults for required properties
+  // Provide default values for all required properties
   const [objectives, setObjectives] = useState<Objective[]>(
     data.objectives?.map(obj => ({
-      text: obj.text || "",
+      text: obj.text || "Learning Objective", // Default value instead of empty string
       bloomsLevel: obj.bloomsLevel || "understand"
     })) || []
   );

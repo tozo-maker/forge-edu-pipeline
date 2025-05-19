@@ -73,10 +73,10 @@ const ContentStructureStep: React.FC<ContentStructureStepProps> = ({
   onNext, 
   onBack 
 }) => {
-  // Initialize sections with proper defaults for required properties
+  // Make sure to provide definitive values for all required properties
   const [sections, setSections] = useState<ContentSection[]>(
     data.contentSections?.map(section => ({
-      title: section.title || "",
+      title: section.title || "Untitled Section", // Default value instead of empty string
       description: section.description || "",
       sequence: section.sequence || 0
     })) || []
