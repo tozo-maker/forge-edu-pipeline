@@ -73,8 +73,13 @@ const ContentStructureStep: React.FC<ContentStructureStepProps> = ({
   onNext, 
   onBack 
 }) => {
+  // Initialize sections with proper defaults for required properties
   const [sections, setSections] = useState<ContentSection[]>(
-    data.contentSections?.length ? data.contentSections : []
+    data.contentSections?.map(section => ({
+      title: section.title || "",
+      description: section.description || "",
+      sequence: section.sequence || 0
+    })) || []
   );
   const [newSectionTitle, setNewSectionTitle] = useState("");
   const [newSectionDescription, setNewSectionDescription] = useState("");
@@ -83,7 +88,7 @@ const ContentStructureStep: React.FC<ContentStructureStepProps> = ({
     resolver: zodResolver(contentStructureSchema),
     defaultValues: {
       organizationPattern: data.organizationPattern || 'sequential',
-      contentSections: data.contentSections || [],
+      contentSections: sections,
       estimatedDuration: data.estimatedDuration || "",
     },
   });

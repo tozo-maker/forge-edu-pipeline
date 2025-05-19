@@ -48,11 +48,19 @@ type LearningObjectivesStepProps = {
   onBack: () => void;
 };
 
+type Objective = {
+  text: string;
+  bloomsLevel: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+};
+
 const LearningObjectivesStep: React.FC<LearningObjectivesStepProps> = ({ data, onNext, onBack }) => {
-  const [objectives, setObjectives] = useState<Array<{
-    text: string;
-    bloomsLevel: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
-  }>>(data.objectives || []);
+  // Initialize objectives with proper defaults for required properties
+  const [objectives, setObjectives] = useState<Objective[]>(
+    data.objectives?.map(obj => ({
+      text: obj.text || "",
+      bloomsLevel: obj.bloomsLevel || "understand"
+    })) || []
+  );
   
   const [newObjectiveText, setNewObjectiveText] = useState("");
   const [newObjectiveBloom, setNewObjectiveBloom] = useState<'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create'>('understand');
@@ -60,14 +68,14 @@ const LearningObjectivesStep: React.FC<LearningObjectivesStepProps> = ({ data, o
   const form = useForm<z.infer<typeof learningObjectivesSchema>>({
     resolver: zodResolver(learningObjectivesSchema),
     defaultValues: {
-      objectives: data.objectives || [],
+      objectives: objectives,
     },
   });
 
   const addObjective = () => {
     if (!newObjectiveText.trim()) return;
     
-    const newObjective = {
+    const newObjective: Objective = {
       text: newObjectiveText,
       bloomsLevel: newObjectiveBloom
     };
