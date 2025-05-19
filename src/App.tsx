@@ -14,6 +14,7 @@ import Onboarding from "./pages/Onboarding";
 import PipelineIntro from "./pages/PipelineIntro";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
+import ProjectWizard from "./pages/ProjectWizard"; // Add this import
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./contexts/AuthContext";
 
@@ -49,6 +50,7 @@ const AppRoutes = () => {
       <Route path="/pipeline-intro" element={<ProtectedRoute><PipelineIntro /></ProtectedRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+      <Route path="/projects/new" element={<ProtectedRoute><ProjectWizard /></ProtectedRoute>} />
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
