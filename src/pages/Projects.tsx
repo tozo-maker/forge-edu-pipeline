@@ -9,7 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { formatDistanceToNow } from "date-fns";
 
-const ProjectsPage: React.FC = () => {
+const Projects: React.FC = () => {
   const { projects, loading } = useProjects();
   const navigate = useNavigate();
 
