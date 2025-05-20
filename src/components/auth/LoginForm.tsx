@@ -16,6 +16,8 @@ import { Input } from "@/components/ui/input";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 const formSchema = z.object({
   email: z.string().email({ message: "Please enter a valid email address" }),
@@ -27,7 +29,7 @@ type FormValues = z.infer<typeof formSchema>;
 const LoginForm: React.FC = () => {
   const navigate = useNavigate();
   const { signIn, isLoading } = useAuth();
-  const [error, setError] = useState<string | null>(null);
+  const [serverError, setServerError] = useState<string | null>(null);
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -39,14 +41,13 @@ const LoginForm: React.FC = () => {
 
   const onSubmit = async (values: FormValues) => {
     try {
-      setError(null);
+      setServerError(null);
       await signIn(values.email, values.password);
       // If login is successful, navigate to dashboard
       navigate("/dashboard");
     } catch (error: any) {
-      // Error is already displayed by AuthContext's toast
-      setError("Invalid email or password. Please try again.");
-      console.error("Login error:", error);
+      console.error("Login error details:", error);
+      setServerError("Invalid email or password. Please try again.");
     }
   };
 
@@ -57,10 +58,11 @@ const LoginForm: React.FC = () => {
         <p className="text-sm text-gray-600">Sign in to continue creating educational content</p>
       </div>
       
-      {error && (
-        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">
-          {error}
-        </div>
+      {serverError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{serverError}</AlertDescription>
+        </Alert>
       )}
       
       <Form {...form}>

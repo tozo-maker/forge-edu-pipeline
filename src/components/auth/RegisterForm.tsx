@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -23,6 +23,8 @@ import {
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
 import { useAuth } from "@/contexts/AuthContext";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
@@ -38,6 +40,7 @@ type FormValues = z.infer<typeof formSchema>;
 const RegisterForm: React.FC = () => {
   const navigate = useNavigate();
   const { signUp, isLoading } = useAuth();
+  const [serverError, setServerError] = useState<string | null>(null);
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -51,6 +54,7 @@ const RegisterForm: React.FC = () => {
 
   const onSubmit = async (values: FormValues) => {
     try {
+      setServerError(null);
       const { name, email, password, role } = values;
       
       // Split name into first and last name
@@ -68,9 +72,9 @@ const RegisterForm: React.FC = () => {
       await signUp(email, password, metadata);
       toast.success("Registration successful! Please check your email for confirmation.");
       navigate("/login");
-    } catch (error) {
-      // Error is already handled in the AuthContext
-      console.error("Registration error:", error);
+    } catch (error: any) {
+      console.error("Registration error details:", error);
+      setServerError(error?.message || "Registration failed. Please try again.");
     }
   };
 
@@ -80,6 +84,13 @@ const RegisterForm: React.FC = () => {
         <h2 className="text-2xl font-bold">Create an Account</h2>
         <p className="text-sm text-gray-600">Join EduForge AI and start creating content</p>
       </div>
+      
+      {serverError && (
+        <Alert variant="destructive" className="mb-4">
+          <AlertCircle className="h-4 w-4" />
+          <AlertDescription>{serverError}</AlertDescription>
+        </Alert>
+      )}
       
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">
