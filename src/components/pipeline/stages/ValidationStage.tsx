@@ -1,96 +1,35 @@
+
 import React, { useState, useEffect } from "react";
-import { useParams, useNavigate } from "react-router-dom";
-import ProjectStageLayout from "@/components/pipeline/ProjectStageLayout";
-import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { Label } from "@/components/ui/label";
-import { useToast } from "@/hooks/use-toast";
+import { useParams } from "react-router-dom";
 import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
+import ProjectStageLayout from "@/components/pipeline/ProjectStageLayout";
+import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardFooter } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import {
-  Loader2,
-  FileText,
-  BookOpen,
-  CheckCircle,
-  XCircle,
-  Edit,
-  CheckSquare,
-  AlertCircle,
-  Check
-} from "lucide-react";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
+import { Button } from "@/components/ui/button";
+import { Badge } from "@/components/ui/badge";
+import { Loader2, Award, AlertTriangle, Check, FileCheck, FileX } from "lucide-react";
+import { Textarea } from "@/components/ui/textarea";
+import { useMediaQuery } from "@/hooks/use-mobile";
 
-// Define explicit typing for sections and prompts
-interface Section {
-  id: string;
-  title: string;
-  description: string;
-  order_index: number;
-  outline_id: string;
-  config: Record<string, any>;
-}
-
-interface Prompt {
-  id: string;
-  section_id: string;
-  prompt_text: string;
-  content_id?: string;
-}
-
-interface ContentItem {
-  id: string;
-  prompt_id: string;
-  content_text: string;
-}
-
-interface Validation {
-  id?: string;
-  content_id: string;
-  validation_data: Record<string, any>;
-  quality_score: number | null;
-  standards_alignment_score: number | null;
-  improvement_suggestions: string;
-  is_approved: boolean;
-}
-
-const ValidationStage: React.FC = () => {
+const ValidationStage = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const { toast } = useToast();
-  const navigate = useNavigate();
   const [isLoading, setIsLoading] = useState(true);
   const [isValidating, setIsValidating] = useState(false);
-  const [activeTab, setActiveTab] = useState("content");
-  const [sections, setSections] = useState<Section[]>([]);
-  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
-  const [validations, setValidations] = useState<Validation[]>([]);
+  const [sections, setSections] = useState<any[]>([]);
+  const [contentItems, setContentItems] = useState<any[]>([]);
+  const [validations, setValidations] = useState<any[]>([]);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
-  const [projectStandards, setProjectStandards] = useState<string[]>([]);
-  const [prompts, setPrompts] = useState<Prompt[]>([]);
-
-  // Fetch all data
+  const isMobile = useMediaQuery("md");
+  const [activeTab, setActiveTab] = useState<string>("content");
+  
   useEffect(() => {
     const fetchData = async () => {
       if (!projectId) return;
       
       try {
-        // Get project config to get educational standards
-        const { data: projectConfig, error: configError } = await supabase
-          .from("project_configs")
-          .select("*")
-          .eq("project_id", projectId)
-          .single();
-          
-        if (configError && configError.code !== "PGRST116") throw configError;
-        
-        if (projectConfig) {
-          // Type cast config_data as a Record to access properties safely
-          const configData = projectConfig.config_data as Record<string, any>;
-          if (configData?.educationalContext?.standards) {
-            setProjectStandards(configData.educationalContext.standards);
-          }
-        }
-        
         // Get outline
         const { data: outline, error: outlineError } = await supabase
           .from("outlines")
@@ -108,27 +47,30 @@ const ValidationStage: React.FC = () => {
           .order("order_index", { ascending: true });
           
         if (sectionsError) throw sectionsError;
-        setSections(sectionsData as Section[]);
+        setSections(sectionsData);
         
-        // Get prompts to link to content items
-        const { data: promptsData, error: promptsError } = await supabase
+        // Get prompts
+        const { data: prompts, error: promptsError } = await supabase
           .from("prompts")
           .select("*")
           .in(
             "section_id",
-            sectionsData.map(s => s.id)
+            sectionsData.map((s) => s.id)
           );
           
         if (promptsError) throw promptsError;
-        setPrompts(promptsData as Prompt[]);
+        
+        if (!prompts || prompts.length === 0) {
+          throw new Error("No prompts found for this project");
+        }
         
         // Get content items
         const { data: contentData, error: contentError } = await supabase
           .from("content_items")
-          .select("*")
+          .select("*, prompt:prompt_id(*)")
           .in(
             "prompt_id",
-            promptsData.map(p => p.id)
+            prompts.map((p) => p.id)
           );
           
         if (contentError) throw contentError;
@@ -140,37 +82,17 @@ const ValidationStage: React.FC = () => {
           .select("*")
           .in(
             "content_id",
-            contentData.map((c: ContentItem) => c.id)
+            contentData.map((c) => c.id)
           );
           
         if (validationsError) throw validationsError;
-        
-        // If no validations exist yet, initialize empty ones
-        if (!validationsData || validationsData.length === 0) {
-          const initialValidations = contentData.map((content: ContentItem) => ({
-            content_id: content.id,
-            validation_data: {} as Record<string, any>,
-            quality_score: null,
-            standards_alignment_score: null,
-            improvement_suggestions: "",
-            is_approved: false,
-          }));
-          
-          setValidations(initialValidations);
-        } else {
-          // Convert the Json type to Record<string, any> when setting validation data
-          const typedValidations = validationsData.map(v => ({
-            ...v,
-            validation_data: v.validation_data as unknown as Record<string, any>
-          }));
-          setValidations(typedValidations);
-        }
+        setValidations(validationsData || []);
         
       } catch (error) {
-        console.error("Error fetching validation data:", error);
+        console.error("Error fetching data:", error);
         toast({
           title: "Error",
-          description: "Failed to load validation data",
+          description: "Failed to load validation data: " + (error.message || "Unknown error"),
           variant: "destructive",
         });
       } finally {
@@ -180,174 +102,100 @@ const ValidationStage: React.FC = () => {
     
     fetchData();
   }, [projectId, toast]);
-
-  // Helper functions to get related data
-  const getCurrentSectionContent = () => {
-    if (!sections.length) return null;
-    
-    const currentSection = sections[currentSectionIndex];
-    // Find prompt for current section
-    const sectionPrompt = prompts.find(p => p.section_id === currentSection?.id);
-    
-    return sectionPrompt 
-      ? contentItems.find(c => c.prompt_id === sectionPrompt.id)
-      : null;
-  };
   
-  const getCurrentValidation = () => {
-    const content = getCurrentSectionContent();
-    if (!content) return null;
-    
-    return validations.find(v => v.content_id === content.id);
-  };
-
-  // Calculate the related data for current section
-  const currentSection = sections[currentSectionIndex];
-  const currentContent = getCurrentSectionContent();
-  const currentValidation = getCurrentValidation();
-
-  // Run validation for current section
-  const runValidation = async () => {
-    if (isValidating || !currentContent || !currentSection) return;
+  const validateAllContent = async () => {
+    if (isValidating) return;
     
     try {
       setIsValidating(true);
       
+      const items = [...contentItems];
+      let validatedCount = 0;
+      
       toast({
-        title: "Running Validation",
-        description: `Validating content for "${currentSection.title}"`,
+        title: "Starting Validation",
+        description: `Validating ${items.length} content sections against educational standards...`,
       });
       
-      // Simulate validation process
-      await new Promise(resolve => setTimeout(resolve, 3000));
-      
-      // Generate sample validation results
-      const qualityScore = Math.floor(Math.random() * 30) + 70; // 70-100
-      const alignmentScore = Math.floor(Math.random() * 30) + 70; // 70-100
-      
-      let suggestions = "";
-      if (qualityScore < 85) {
-        suggestions += "- Consider adding more examples to illustrate key concepts.\n";
-        suggestions += "- Introduce more interactive elements to engage different learning styles.\n";
-      }
-      
-      if (alignmentScore < 85) {
-        suggestions += "- Strengthen alignment with curriculum standards by explicitly referencing key requirements.\n";
-        suggestions += "- Add assessment components that directly measure standard outcomes.\n";
-      }
-      
-      if (qualityScore >= 90 && alignmentScore >= 90) {
-        suggestions += "- This content meets high quality standards. Consider adding extension activities for advanced learners.\n";
-      }
-      
-      const validationData: Record<string, any> = {
-        content_analysis: {
-          readability_level: Math.random() > 0.5 ? "Appropriate" : "Slightly advanced",
-          educational_completeness: Math.random() > 0.7 ? "Complete" : "Needs minor additions",
-          pedagogical_approach: Math.random() > 0.6 ? "Strong" : "Adequate"
-        },
-        standards_alignment: projectStandards.map(standard => ({
-          standard_id: standard,
-          alignment_level: Math.random() > 0.7 ? "Strong" : "Partial"
-        })),
-        improvement_areas: Math.random() > 0.5 
-          ? ["Add more examples", "Include differentiation strategies"] 
-          : ["Clarify key concepts", "Add assessment components"]
-      };
-      
-      // Check if validation already exists
-      const existingValidation = validations.find(v => v.content_id === currentContent.id);
-      
-      if (existingValidation?.id) {
-        // Update existing validation
-        const { error } = await supabase
-          .from("validations")
-          .update({
-            validation_data: validationData,
-            quality_score: qualityScore,
-            standards_alignment_score: alignmentScore,
-            improvement_suggestions: suggestions,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingValidation.id);
+      for (const item of items) {
+        try {
+          // Skip if already validated
+          if (validations.find(v => v.content_id === item.id)) {
+            validatedCount++;
+            continue;
+          }
           
-        if (error) throw error;
-        
-        // Update local state
-        setValidations(prev => prev.map(v => 
-          v.id === existingValidation.id 
-            ? { 
-                ...v, 
-                validation_data: validationData, 
-                quality_score: qualityScore, 
-                standards_alignment_score: alignmentScore, 
-                improvement_suggestions: suggestions 
-              } 
-            : v
-        ));
-      } else {
-        // Create new validation
-        const { data: newValidation, error } = await supabase
-          .from("validations")
-          .insert({
-            content_id: currentContent.id,
-            validation_data: validationData,
-            quality_score: qualityScore,
-            standards_alignment_score: alignmentScore,
-            improvement_suggestions: suggestions,
-          })
-          .select()
-          .single();
+          // Call validation edge function
+          const { data: response, error } = await supabase.functions.invoke("validate-educational-content", {
+            body: {
+              contentId: item.id,
+            },
+          });
           
-        if (error) throw error;
-        
-        // Update local state with proper typing
-        const typedNewValidation: Validation = {
-          ...newValidation,
-          validation_data: newValidation.validation_data as unknown as Record<string, any>
-        };
-        setValidations(prev => [...prev, typedNewValidation]);
+          if (error) throw error;
+          
+          if (response.success && response.validation) {
+            // Add to validations
+            setValidations(prev => [...prev, {
+              content_id: item.id,
+              validation_data: response.validation,
+              quality_score: response.validation.quality_score,
+              standards_alignment_score: response.validation.standards_alignment_score,
+              improvement_suggestions: response.validation.improvement_suggestions,
+              is_approved: response.validation.quality_score >= 8.0 && response.validation.standards_alignment_score >= 8.0
+            }]);
+            
+            validatedCount++;
+            
+            // Show progress
+            if (validatedCount % 2 === 0 || validatedCount === items.length) {
+              toast({
+                title: "Validation Progress",
+                description: `Validated ${validatedCount} of ${items.length} sections`,
+              });
+            }
+          }
+          
+          // Add small delay to prevent rate limiting
+          await new Promise(resolve => setTimeout(resolve, 1000));
+          
+        } catch (itemError) {
+          console.error("Error validating content item:", itemError);
+          // Continue with next item
+        }
       }
       
       toast({
         title: "Validation Complete",
-        description: `Quality Score: ${qualityScore}/100, Alignment Score: ${alignmentScore}/100`,
+        description: `Successfully validated ${validatedCount} of ${items.length} content sections`,
       });
       
-      // Switch to results tab
-      setActiveTab("results");
-      
     } catch (error) {
-      console.error("Error running validation:", error);
+      console.error("Error in validation process:", error);
       toast({
-        title: "Error",
-        description: "Failed to complete validation",
+        title: "Validation Error",
+        description: "An error occurred during content validation: " + (error.message || "Unknown error"),
         variant: "destructive",
       });
     } finally {
       setIsValidating(false);
     }
   };
-
-  // Update improvement suggestions
-  const updateSuggestions = async (suggestions: string) => {
-    if (!currentValidation?.id) return;
+  
+  const updateImprovementSuggestion = async (validationId: string, suggestions: string) => {
+    if (!validationId) return;
     
     try {
-      await supabase
+      const { error } = await supabase
         .from("validations")
-        .update({
-          improvement_suggestions: suggestions,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", currentValidation.id);
+        .update({ improvement_suggestions: suggestions })
+        .eq("id", validationId);
         
-      // Update local state
-      setValidations(prev => prev.map(v => 
-        v.id === currentValidation.id 
-          ? { ...v, improvement_suggestions: suggestions } 
-          : v
-      ));
+      if (error) throw error;
+      
+      setValidations(prev => 
+        prev.map(v => v.id === validationId ? { ...v, improvement_suggestions: suggestions } : v)
+      );
       
       toast({
         title: "Suggestions Updated",
@@ -357,42 +205,33 @@ const ValidationStage: React.FC = () => {
       console.error("Error updating suggestions:", error);
       toast({
         title: "Error",
-        description: "Failed to update suggestions",
+        description: "Failed to update improvement suggestions",
         variant: "destructive",
       });
     }
   };
-
-  // Toggle content approval
-  const toggleApproval = async () => {
-    if (!currentValidation?.id) return;
+  
+  const toggleApproval = async (validationId: string, currentStatus: boolean) => {
+    if (!validationId) return;
     
     try {
-      const newApprovalStatus = !currentValidation.is_approved;
-      
-      await supabase
+      const { error } = await supabase
         .from("validations")
-        .update({
-          is_approved: newApprovalStatus,
-          updated_at: new Date().toISOString(),
-        })
-        .eq("id", currentValidation.id);
+        .update({ is_approved: !currentStatus })
+        .eq("id", validationId);
         
-      // Update local state
-      setValidations(prev => prev.map(v => 
-        v.id === currentValidation.id 
-          ? { ...v, is_approved: newApprovalStatus } 
-          : v
-      ));
+      if (error) throw error;
+      
+      setValidations(prev => 
+        prev.map(v => v.id === validationId ? { ...v, is_approved: !currentStatus } : v)
+      );
       
       toast({
-        title: newApprovalStatus ? "Content Approved" : "Approval Removed",
-        description: newApprovalStatus 
-          ? "Content has passed validation" 
-          : "Content requires further improvement",
+        title: currentStatus ? "Content Needs Review" : "Content Approved",
+        description: currentStatus ? "Content marked for further review" : "Content has been approved",
       });
     } catch (error) {
-      console.error("Error updating approval status:", error);
+      console.error("Error toggling approval:", error);
       toast({
         title: "Error",
         description: "Failed to update approval status",
@@ -400,94 +239,48 @@ const ValidationStage: React.FC = () => {
       });
     }
   };
-
-  // Handle section switching
-  const switchSection = (index: number) => {
-    setCurrentSectionIndex(index);
-    setActiveTab("content"); // Reset to content tab when switching sections
+  
+  const getCurrentContentAndValidation = () => {
+    if (!sections.length || currentSectionIndex >= sections.length) {
+      return { content: null, validation: null };
+    }
+    
+    const currentSection = sections[currentSectionIndex];
+    const content = contentItems.find(c => c.prompt.section_id === currentSection.id);
+    
+    if (!content) {
+      return { content: null, validation: null };
+    }
+    
+    const validation = validations.find(v => v.content_id === content.id);
+    
+    return { content, validation };
   };
-
-  // Check if all content is approved
+  
   const allContentValidated = () => {
-    return (
-      contentItems.length > 0 &&
-      contentItems.every(content => {
-        const validation = validations.find(v => v.content_id === content.id);
-        return validation && validation.is_approved;
-      })
+    return contentItems.length > 0 && contentItems.every(content => 
+      validations.some(v => v.content_id === content.id && v.is_approved)
     );
   };
-
-  // Handle final completion
-  const handleCompletion = async () => {
+  
+  const handleSubmit = async () => {
     if (!allContentValidated()) {
       toast({
-        title: "Cannot Complete",
-        description: "All content must be validated and approved",
+        title: "Cannot Proceed",
+        description: "All content must be validated and approved before proceeding",
         variant: "destructive",
       });
       return false;
     }
     
-    try {
-      // In a real implementation, this would finalize the project
-      toast({
-        title: "Project Complete!",
-        description: "Your educational content has been fully validated",
-      });
-      
-      navigate(`/projects/${projectId}`);
-      return true;
-    } catch (error) {
-      console.error("Error completing project:", error);
-      toast({
-        title: "Error",
-        description: "Failed to complete project",
-        variant: "destructive",
-      });
-      return false;
-    }
+    return true;
   };
-
-  // Calculate overall validation progress
-  const getValidationProgress = () => {
-    if (!validations.length || !contentItems.length) return 0;
-    
-    const validatedCount = validations.filter(v => 
-      v.quality_score !== null && v.standards_alignment_score !== null
-    ).length;
-    
-    const approvedCount = validations.filter(v => v.is_approved).length;
-    
-    // Calculate progress: 50% for having validations, 50% for approvals
-    return (validatedCount / contentItems.length) * 50 + (approvedCount / contentItems.length) * 50;
-  };
-
-  // Find validation status for a section
-  const getSectionValidationStatus = (sectionId: string) => {
-    // Find prompt for this section
-    const sectionPrompt = prompts.find(p => p.section_id === sectionId);
-    if (!sectionPrompt) return "pending";
-    
-    // Find content for this prompt
-    const sectionContent = contentItems.find(c => c.prompt_id === sectionPrompt.id);
-    if (!sectionContent) return "pending";
-    
-    // Find validation for this content
-    const sectionValidation = validations.find(v => v.content_id === sectionContent.id);
-    if (!sectionValidation) return "pending";
-    
-    if (sectionValidation.is_approved) return "approved";
-    if (sectionValidation.quality_score !== null) return "validated";
-    
-    return "pending";
-  };
-
+  
   if (isLoading) {
     return (
       <ProjectStageLayout
-        title="Validation & Enhancement"
-        description="Loading validation data..."
+        title="Content Validation"
+        description="Loading content validation data..."
         isLoading={true}
       >
         <div className="flex justify-center py-8">
@@ -496,340 +289,352 @@ const ValidationStage: React.FC = () => {
       </ProjectStageLayout>
     );
   }
-
+  
+  const { content: currentContent, validation: currentValidation } = getCurrentContentAndValidation();
+  const validationData = currentValidation?.validation_data;
+  
   return (
     <ProjectStageLayout
-      title="Validation & Enhancement"
-      description="Validate content against educational standards and enhance quality"
-      onNext={handleCompletion}
+      title="Content Validation"
+      description="Validate and enhance your educational content against standards"
+      onNext={handleSubmit}
       isNextDisabled={!allContentValidated()}
+      isLoading={isValidating}
+      loadingMessage={isValidating ? "Validating content against educational standards..." : undefined}
     >
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
-        {/* Sections sidebar */}
-        <div className="md:col-span-1">
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-lg">Content Sections</CardTitle>
-            </CardHeader>
-            <CardContent className="py-2 px-3 space-y-1">
-              {sections.map((section, index) => {
-                // Find validation status for this section
-                const status = getSectionValidationStatus(section.id);
-                
-                return (
-                  <div
-                    key={section.id}
-                    className={`flex items-center justify-between p-2 rounded cursor-pointer ${
-                      index === currentSectionIndex
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-gray-100 hover:bg-gray-200"
-                    }`}
-                    onClick={() => switchSection(index)}
-                  >
-                    <div className="truncate flex-1">
-                      <span className="mr-1 font-medium">{index + 1}.</span>
-                      {section.title || "Untitled Section"}
-                    </div>
-                    <div className="flex items-center">
-                      {status === "approved" && (
-                        <CheckCircle className="h-4 w-4 text-green-500 ml-2" />
-                      )}
-                      {status === "validated" && (
-                        <AlertCircle className="h-4 w-4 text-amber-500 ml-2" />
-                      )}
-                      {status === "pending" && (
-                        <FileText className="h-4 w-4 text-gray-400 ml-2" />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-            <CardFooter className="border-t pt-3 px-3">
-              <div className="w-full space-y-2">
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Validation Progress</span>
-                  <span>{Math.round(getValidationProgress())}%</span>
-                </div>
-                <Progress value={getValidationProgress()} className="h-2" />
-              </div>
-            </CardFooter>
-          </Card>
+      <div className="space-y-6">
+        <div className="flex justify-between items-center">
+          <div>
+            <h2 className="text-lg font-medium">Educational Content Validation</h2>
+            <p className="text-sm text-gray-500">
+              Analyze content quality and alignment with educational standards
+            </p>
+          </div>
+          
+          <Button 
+            onClick={validateAllContent} 
+            disabled={isValidating || !contentItems.length}
+            className="gap-2"
+          >
+            {isValidating ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Award className="h-4 w-4" />
+            )}
+            {validations.length > 0 ? "Revalidate All Content" : "Validate All Content"}
+          </Button>
         </div>
         
-        {/* Content and validation area */}
-        <div className="md:col-span-3 space-y-4">
-          <Card>
-            <CardHeader>
-              <CardTitle>
-                {currentSection?.title || "Section Content"}
-              </CardTitle>
-              <CardDescription>
-                {currentSection?.description || "Validate and enhance this content"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-                <TabsList className="grid grid-cols-3">
-                  <TabsTrigger value="content">
-                    <FileText className="h-4 w-4 mr-2" />
-                    Content
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="results" 
-                    disabled={!currentValidation?.quality_score}
-                  >
-                    <CheckSquare className="h-4 w-4 mr-2" />
-                    Validation Results
-                  </TabsTrigger>
-                  <TabsTrigger 
-                    value="improvements"
-                    disabled={!currentValidation?.quality_score}
-                  >
-                    <Edit className="h-4 w-4 mr-2" />
-                    Improvements
-                  </TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="content" className="space-y-4">
-                  <div className="border rounded-md p-4 space-y-2 bg-gray-50">
-                    <div className="prose max-w-none">
-                      <pre className="whitespace-pre-wrap text-sm font-mono">
-                        {currentContent?.content_text || "No content available for this section"}
-                      </pre>
-                    </div>
-                  </div>
+        {/* Section Navigation */}
+        <Card>
+          <CardHeader>
+            <CardTitle className="text-base">Content Sections</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid gap-2">
+              {sections.map((section, index) => {
+                const sectionContent = contentItems.find(c => c.prompt.section_id === section.id);
+                const sectionValidation = sectionContent 
+                  ? validations.find(v => v.content_id === sectionContent.id)
+                  : null;
                   
-                  <div className="flex justify-between">
-                    <Button
-                      variant="outline"
-                      onClick={() => navigate(`/projects/${projectId}/content`)}
-                    >
-                      <Edit className="h-4 w-4 mr-2" />
-                      Edit Content
-                    </Button>
-                    
-                    <Button
-                      onClick={runValidation}
-                      disabled={isValidating || !currentContent}
-                    >
-                      {isValidating ? (
-                        <>
-                          <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-                          Validating...
-                        </>
-                      ) : (
-                        <>
-                          <BookOpen className="h-4 w-4 mr-2" />
-                          Run Validation
-                        </>
-                      )}
-                    </Button>
-                  </div>
-                </TabsContent>
+                const validationStatus = !sectionContent ? "missing" :
+                  !sectionValidation ? "pending" :
+                  sectionValidation.is_approved ? "approved" : "needs-review";
                 
-                <TabsContent value="results" className="space-y-6">
-                  {currentValidation?.quality_score ? (
-                    <>
-                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        {/* Quality score */}
-                        <Card>
-                          <CardHeader className="py-3">
-                            <CardTitle className="text-lg">Quality Score</CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="flex flex-col items-center">
-                              <div className={`
-                                w-24 h-24 rounded-full flex items-center justify-center text-2xl font-bold
-                                ${currentValidation.quality_score >= 90 ? 'bg-green-100 text-green-700' : 
-                                  currentValidation.quality_score >= 75 ? 'bg-amber-100 text-amber-700' : 
-                                  'bg-red-100 text-red-700'}
-                              `}>
-                                {currentValidation.quality_score}/100
-                              </div>
-                              <p className="mt-2 text-sm text-gray-500">
-                                {currentValidation.quality_score >= 90 ? 'Excellent' : 
-                                 currentValidation.quality_score >= 75 ? 'Good' : 'Needs Improvement'}
-                              </p>
-                            </div>
-                            
-                            <div className="mt-4">
-                              <h4 className="text-sm font-medium mb-2">Analysis:</h4>
-                              <ul className="text-sm space-y-1">
-                                <li className="flex items-center">
-                                  <span className="w-40">Readability Level:</span>
-                                  <span>{currentValidation.validation_data?.content_analysis?.readability_level || "N/A"}</span>
-                                </li>
-                                <li className="flex items-center">
-                                  <span className="w-40">Completeness:</span>
-                                  <span>{currentValidation.validation_data?.content_analysis?.educational_completeness || "N/A"}</span>
-                                </li>
-                                <li className="flex items-center">
-                                  <span className="w-40">Pedagogical Approach:</span>
-                                  <span>{currentValidation.validation_data?.content_analysis?.pedagogical_approach || "N/A"}</span>
-                                </li>
-                              </ul>
-                            </div>
-                          </CardContent>
-                        </Card>
-                        
-                        {/* Standards alignment score */}
-                        <Card>
-                          <CardHeader className="py-3">
-                            <CardTitle className="text-lg">Standards Alignment</CardTitle>
-                          </CardHeader>
-                          <CardContent className="pt-0">
-                            <div className="flex flex-col items-center">
-                              <div className={`
-                                w-24 h-24 rounded-full flex items-center justify-center text-2xl font-bold
-                                ${currentValidation.standards_alignment_score >= 90 ? 'bg-green-100 text-green-700' : 
-                                  currentValidation.standards_alignment_score >= 75 ? 'bg-amber-100 text-amber-700' : 
-                                  'bg-red-100 text-red-700'}
-                              `}>
-                                {currentValidation.standards_alignment_score}/100
-                              </div>
-                              <p className="mt-2 text-sm text-gray-500">
-                                {currentValidation.standards_alignment_score >= 90 ? 'High Alignment' : 
-                                 currentValidation.standards_alignment_score >= 75 ? 'Moderate Alignment' : 'Low Alignment'}
-                              </p>
-                            </div>
-                            
-                            <div className="mt-4">
-                              <h4 className="text-sm font-medium mb-2">Standards:</h4>
-                              <ul className="text-sm space-y-1">
-                                {currentValidation.validation_data?.standards_alignment?.map((item: any, index: number) => (
-                                  <li key={index} className="flex items-center justify-between">
-                                    <span>{item.standard_id}</span>
-                                    <span className={
-                                      item.alignment_level === "Strong" ? "text-green-600" : "text-amber-600"
-                                    }>
-                                      {item.alignment_level}
-                                    </span>
-                                  </li>
-                                )) || (
-                                  <li>No standards alignment data available</li>
-                                )}
-                              </ul>
-                            </div>
-                          </CardContent>
-                        </Card>
-                      </div>
-                      
-                      <Card>
-                        <CardHeader className="py-3">
-                          <CardTitle className="text-sm">Improvement Areas</CardTitle>
-                        </CardHeader>
-                        <CardContent className="pt-0">
-                          <ul className="text-sm space-y-1">
-                            {currentValidation.validation_data?.improvement_areas?.map((area: string, index: number) => (
-                              <li key={index} className="flex items-center">
-                                <AlertCircle className="h-4 w-4 mr-2 text-amber-500" />
-                                {area}
-                              </li>
-                            )) || (
-                              <li>No improvement areas identified</li>
-                            )}
-                          </ul>
-                        </CardContent>
-                      </Card>
-                      
-                      <div className="flex justify-end">
-                        <Button
-                          onClick={() => setActiveTab("improvements")}
-                          className="gap-2"
-                        >
-                          <Edit className="h-4 w-4" />
-                          View Suggested Improvements
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="text-center py-12">
-                      <AlertCircle className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                      <h3 className="text-lg font-medium mb-2">No Validation Results</h3>
-                      <p className="text-gray-500 mb-4">
-                        Run validation on the content first
-                      </p>
-                      <Button onClick={() => setActiveTab("content")}>
-                        Go to Content
-                      </Button>
-                    </div>
-                  )}
-                </TabsContent>
-                
-                <TabsContent value="improvements" className="space-y-4">
-                  <div className="space-y-4">
-                    <div>
-                      <Label htmlFor="improvement-suggestions">Improvement Suggestions</Label>
-                      <Textarea
-                        id="improvement-suggestions"
-                        className="min-h-[200px] font-mono"
-                        placeholder="Add suggestions for improving this content..."
-                        value={currentValidation?.improvement_suggestions || ""}
-                        onChange={(e) => {
-                          // Update local state
-                          setValidations(prev => prev.map(v => 
-                            v.content_id === currentValidation?.content_id 
-                              ? { ...v, improvement_suggestions: e.target.value } 
-                              : v
-                          ));
-                        }}
-                        onBlur={(e) => updateSuggestions(e.target.value)}
-                      />
-                    </div>
-                    
-                    <div className="flex justify-between">
-                      <Button
-                        variant="outline"
-                        onClick={() => navigate(`/projects/${projectId}/content`)}
-                      >
-                        <Edit className="h-4 w-4 mr-2" />
-                        Edit Content
-                      </Button>
-                      
-                      <Button
-                        onClick={toggleApproval}
-                        variant={currentValidation?.is_approved ? "outline" : "default"}
-                      >
-                        {currentValidation?.is_approved ? (
-                          <>
-                            <XCircle className="h-4 w-4 mr-2" />
-                            Revoke Approval
-                          </>
-                        ) : (
-                          <>
-                            <CheckCircle className="h-4 w-4 mr-2" />
-                            Approve Content
-                          </>
-                        )}
-                      </Button>
-                    </div>
-                  </div>
-                  
-                  {currentValidation?.is_approved && (
-                    <div className="bg-green-50 border border-green-200 rounded-md p-4 text-green-800 text-sm">
-                      <div className="flex items-center">
-                        <Check className="h-5 w-5 mr-2 flex-shrink-0" />
-                        <span>
-                          This content has been validated and approved. It's ready for final export.
-                        </span>
-                      </div>
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-          
-          {!allContentValidated() && (
-            <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-amber-800 text-sm">
-              <div className="flex items-center">
-                <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-                <span>
-                  All content sections must be validated and approved before completing the project.
-                </span>
-              </div>
+                return (
+                  <Button
+                    key={section.id}
+                    variant={index === currentSectionIndex ? "default" : "outline"}
+                    size="sm"
+                    className="justify-between"
+                    onClick={() => setCurrentSectionIndex(index)}
+                  >
+                    <span className="truncate mr-2">{section.title}</span>
+                    {validationStatus === "missing" && (
+                      <Badge variant="outline" className="bg-red-50 text-red-700">
+                        Missing Content
+                      </Badge>
+                    )}
+                    {validationStatus === "pending" && (
+                      <Badge variant="outline" className="bg-amber-50 text-amber-700">
+                        Not Validated
+                      </Badge>
+                    )}
+                    {validationStatus === "needs-review" && (
+                      <Badge variant="outline" className="bg-blue-50 text-blue-700">
+                        Needs Review
+                      </Badge>
+                    )}
+                    {validationStatus === "approved" && (
+                      <Badge variant="outline" className="bg-green-50 text-green-700">
+                        Approved
+                      </Badge>
+                    )}
+                  </Button>
+                );
+              })}
             </div>
+          </CardContent>
+        </Card>
+        
+        {/* Section Content and Validation */}
+        <div className="space-y-6">
+          {!currentContent ? (
+            <Card>
+              <CardContent className="py-8">
+                <div className="text-center">
+                  <AlertTriangle className="h-12 w-12 text-amber-500 mx-auto mb-4" />
+                  <h3 className="text-lg font-medium mb-2">Content Not Found</h3>
+                  <p className="text-gray-500">
+                    No content has been generated for this section yet. Please return to the Content Generation stage
+                    to create content before validation.
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          ) : (
+            <>
+              <Card>
+                <CardHeader>
+                  <CardTitle>
+                    {sections[currentSectionIndex]?.title || "Section Content"}
+                  </CardTitle>
+                  <CardDescription>
+                    Review the content and its validation results
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+                    <TabsList className={isMobile ? "w-full grid-cols-2" : "grid grid-cols-2"}>
+                      <TabsTrigger value="content" className={isMobile ? "text-xs py-1 px-2" : ""}>
+                        Content
+                      </TabsTrigger>
+                      <TabsTrigger value="validation" disabled={!currentValidation} className={isMobile ? "text-xs py-1 px-2" : ""}>
+                        Validation
+                      </TabsTrigger>
+                    </TabsList>
+                    
+                    <TabsContent value="content">
+                      <div className="space-y-4">
+                        <div className="bg-gray-50 border rounded-md p-4 font-mono text-sm whitespace-pre-wrap">
+                          {currentContent.content_text}
+                        </div>
+                        
+                        {!currentValidation ? (
+                          <div className="flex justify-center">
+                            <Button 
+                              onClick={() => {
+                                if (currentContent) {
+                                  supabase.functions.invoke("validate-educational-content", {
+                                    body: { contentId: currentContent.id }
+                                  }).then(({ data, error }) => {
+                                    if (error) throw error;
+                                    
+                                    if (data.success && data.validation) {
+                                      // Add to validations
+                                      const newValidation = {
+                                        id: data.id,
+                                        content_id: currentContent.id,
+                                        validation_data: data.validation,
+                                        quality_score: data.validation.quality_score,
+                                        standards_alignment_score: data.validation.standards_alignment_score,
+                                        improvement_suggestions: data.validation.improvement_suggestions,
+                                        is_approved: data.validation.quality_score >= 8.0 && data.validation.standards_alignment_score >= 8.0
+                                      };
+                                      
+                                      setValidations(prev => [...prev, newValidation]);
+                                      setActiveTab("validation");
+                                      
+                                      toast({
+                                        title: "Validation Complete",
+                                        description: "Content has been validated successfully",
+                                      });
+                                    }
+                                  }).catch(err => {
+                                    console.error("Error validating content:", err);
+                                    toast({
+                                      title: "Validation Error",
+                                      description: "Failed to validate content: " + (err.message || "Unknown error"),
+                                      variant: "destructive",
+                                    });
+                                  });
+                                }
+                              }}
+                            >
+                              Validate This Content
+                            </Button>
+                          </div>
+                        ) : null}
+                      </div>
+                    </TabsContent>
+                    
+                    <TabsContent value="validation">
+                      {validationData ? (
+                        <div className="space-y-4">
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Card>
+                              <CardHeader className="py-3">
+                                <CardTitle className="text-base">Quality Score</CardTitle>
+                              </CardHeader>
+                              <CardContent className="py-3">
+                                <div className="space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span>Overall Quality</span>
+                                    <span 
+                                      className={validationData.quality_score >= 8 ? 'text-green-600' : 'text-amber-600'}
+                                    >
+                                      {validationData.quality_score}/10
+                                    </span>
+                                  </div>
+                                  <Progress 
+                                    value={validationData.quality_score * 10} 
+                                    className={`h-2 ${validationData.quality_score >= 8 ? 'bg-green-500' : 'bg-amber-500'}`} 
+                                  />
+                                </div>
+                              </CardContent>
+                            </Card>
+                            
+                            <Card>
+                              <CardHeader className="py-3">
+                                <CardTitle className="text-base">Standards Alignment</CardTitle>
+                              </CardHeader>
+                              <CardContent className="py-3">
+                                <div className="space-y-2">
+                                  <div className="flex justify-between text-sm">
+                                    <span>Alignment Score</span>
+                                    <span 
+                                      className={validationData.standards_alignment_score >= 8 ? 'text-green-600' : 'text-amber-600'}
+                                    >
+                                      {validationData.standards_alignment_score}/10
+                                    </span>
+                                  </div>
+                                  <Progress 
+                                    value={validationData.standards_alignment_score * 10} 
+                                    className={`h-2 ${validationData.standards_alignment_score >= 8 ? 'bg-green-500' : 'bg-amber-500'}`} 
+                                  />
+                                </div>
+                              </CardContent>
+                            </Card>
+                          </div>
+                          
+                          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <Card>
+                              <CardHeader className="py-3">
+                                <CardTitle className="text-base flex items-center">
+                                  <Award className="h-4 w-4 mr-2 text-green-600" />
+                                  Strengths
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent className="py-3">
+                                {validationData.strengths && validationData.strengths.length > 0 ? (
+                                  <ul className="list-disc pl-5 space-y-1">
+                                    {validationData.strengths.map((strength: string, i: number) => (
+                                      <li key={i} className="text-sm text-gray-700">{strength}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-sm text-gray-500">No specific strengths identified</p>
+                                )}
+                              </CardContent>
+                            </Card>
+                            
+                            <Card>
+                              <CardHeader className="py-3">
+                                <CardTitle className="text-base flex items-center">
+                                  <AlertTriangle className="h-4 w-4 mr-2 text-amber-600" />
+                                  Areas for Improvement
+                                </CardTitle>
+                              </CardHeader>
+                              <CardContent className="py-3">
+                                {validationData.weaknesses && validationData.weaknesses.length > 0 ? (
+                                  <ul className="list-disc pl-5 space-y-1">
+                                    {validationData.weaknesses.map((weakness: string, i: number) => (
+                                      <li key={i} className="text-sm text-gray-700">{weakness}</li>
+                                    ))}
+                                  </ul>
+                                ) : (
+                                  <p className="text-sm text-gray-500">No specific weaknesses identified</p>
+                                )}
+                              </CardContent>
+                            </Card>
+                          </div>
+                          
+                          <Card>
+                            <CardHeader className="py-3">
+                              <CardTitle className="text-base">Improvement Suggestions</CardTitle>
+                              <CardDescription>
+                                Recommendations to enhance educational quality
+                              </CardDescription>
+                            </CardHeader>
+                            <CardContent className="py-3">
+                              <Textarea
+                                value={currentValidation.improvement_suggestions || validationData.improvement_suggestions || ''}
+                                className="min-h-[100px]"
+                                onChange={(e) => {
+                                  // Update local state only
+                                  setValidations(prev => 
+                                    prev.map(v => v.id === currentValidation.id 
+                                      ? { ...v, improvement_suggestions: e.target.value } 
+                                      : v
+                                    )
+                                  );
+                                }}
+                                onBlur={() => {
+                                  if (currentValidation?.id) {
+                                    updateImprovementSuggestion(
+                                      currentValidation.id, 
+                                      currentValidation.improvement_suggestions || validationData.improvement_suggestions || ''
+                                    );
+                                  }
+                                }}
+                              />
+                            </CardContent>
+                            <CardFooter>
+                              <Button
+                                variant={currentValidation.is_approved ? "outline" : "default"}
+                                className="w-full"
+                                onClick={() => toggleApproval(currentValidation.id, currentValidation.is_approved)}
+                              >
+                                {currentValidation.is_approved ? (
+                                  <>
+                                    <FileX className="h-4 w-4 mr-2" />
+                                    Mark for Revision
+                                  </>
+                                ) : (
+                                  <>
+                                    <FileCheck className="h-4 w-4 mr-2" />
+                                    Approve Content
+                                  </>
+                                )}
+                              </Button>
+                            </CardFooter>
+                          </Card>
+                        </div>
+                      ) : (
+                        <div className="text-center py-8">
+                          <p className="text-gray-500">No validation data available for this content.</p>
+                        </div>
+                      )}
+                    </TabsContent>
+                  </Tabs>
+                </CardContent>
+              </Card>
+              
+              {!allContentValidated() && (
+                <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-amber-800 text-sm">
+                  <div className="flex items-start">
+                    <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+                    <div>
+                      <p className="font-medium">All content must be validated and approved</p>
+                      <p>
+                        Validate and approve each content section before completing the pipeline.
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </>
           )}
         </div>
       </div>

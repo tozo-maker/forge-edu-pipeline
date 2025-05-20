@@ -20,14 +20,17 @@ const ContentGenerationStage: React.FC = () => {
   const { toast } = useToast();
   const [isLoading, setIsLoading] = useState(true);
   const [isGenerating, setIsGenerating] = useState(false);
+  const [isValidating, setIsValidating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [sections, setSections] = useState<any[]>([]);
   const [prompts, setPrompts] = useState<any[]>([]);
   const [contentItems, setContentItems] = useState<any[]>([]);
+  const [validations, setValidations] = useState<Record<string, any>>({});
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<string>("prompt");
   const [showTour, setShowTour] = useState(false);
   const isMobile = useMediaQuery("md");
+  const [generationInterval, setGenerationInterval] = useState<number | null>(null);
 
   useEffect(() => {
     const fetchData = async () => {
@@ -77,6 +80,26 @@ const ContentGenerationStage: React.FC = () => {
         if (contentError) throw contentError;
         setContentItems(contentData || []);
         
+        // Get any existing validations
+        if (contentData && contentData.length > 0) {
+          const { data: validationsData } = await supabase
+            .from("validations")
+            .select("*")
+            .in(
+              "content_id",
+              contentData.map((c: any) => c.id)
+            );
+            
+          if (validationsData && validationsData.length > 0) {
+            // Create a mapping object by content_id
+            const validationsMap: Record<string, any> = {};
+            validationsData.forEach((validation: any) => {
+              validationsMap[validation.content_id] = validation;
+            });
+            setValidations(validationsMap);
+          }
+        }
+        
         // If there are content items, set the active tab to content
         if (contentData && contentData.length > 0) {
           setActiveTab("content");
@@ -102,7 +125,14 @@ const ContentGenerationStage: React.FC = () => {
     };
 
     fetchData();
-  }, [projectId, toast]);
+    
+    // Clear any existing intervals when component unmounts
+    return () => {
+      if (generationInterval) {
+        clearInterval(generationInterval);
+      }
+    };
+  }, [projectId, toast, generationInterval]);
 
   const getCurrentSectionPrompt = () => {
     if (!sections.length || !prompts.length) return null;
@@ -126,65 +156,63 @@ const ContentGenerationStage: React.FC = () => {
       setIsGenerating(true);
       setGenerationProgress(0);
       
+      // Start progress animation
+      const interval = window.setInterval(() => {
+        setGenerationProgress((prev) => {
+          const newProgress = prev + Math.random() * 5;
+          return newProgress > 95 ? 95 : newProgress;
+        });
+      }, 800);
+      
+      setGenerationInterval(interval);
+      
       // Notify the user
       toast({
         title: "Generating Content",
-        description: `Creating content for "${sections[currentSectionIndex].title}"`,
+        description: `Creating content for "${sections[currentSectionIndex].title}" with Claude AI`,
       });
       
-      // Simulate content generation with progress updates
-      const progressInterval = setInterval(() => {
-        setGenerationProgress((prev) => {
-          const newProgress = prev + Math.random() * 10;
-          return newProgress > 95 ? 95 : newProgress;
-        });
-      }, 1000);
+      // Call the edge function to generate content
+      const { data: response, error } = await supabase.functions.invoke("generate-educational-content", {
+        body: {
+          promptId: currentPrompt.id,
+        },
+      });
       
-      // This would be replaced with actual API call to Claude
-      await new Promise((resolve) => setTimeout(resolve, 5000));
-      clearInterval(progressInterval);
+      // Clear interval and set progress to 100%
+      clearInterval(interval);
       setGenerationProgress(100);
       
-      // Generate example content based on prompt and section
-      const section = sections[currentSectionIndex];
-      const sampleContent = generateSampleContent(currentPrompt.prompt_text, section);
+      if (error) throw error;
+      
+      if (!response.success || !response.content) {
+        throw new Error(response.error || "Failed to generate content");
+      }
       
       // Check if content already exists
       const existingContent = contentItems.find((c) => c.prompt_id === currentPrompt.id);
       
       if (existingContent) {
-        // Update existing content
-        const { error } = await supabase
-          .from("content_items")
-          .update({
-            content_text: sampleContent,
-            updated_at: new Date().toISOString(),
-          })
-          .eq("id", existingContent.id);
-          
-        if (error) throw error;
-        
         // Update local state
         setContentItems((prev) =>
           prev.map((c) =>
-            c.id === existingContent.id ? { ...c, content_text: sampleContent } : c
+            c.id === existingContent.id ? { ...c, content_text: response.content, is_approved: false } : c
           )
         );
-      } else {
-        // Create new content item
-        const { data: newContent, error } = await supabase
+      } else if (response.contentId) {
+        // Fetch the newly created content
+        const { data: newContent, error: fetchError } = await supabase
           .from("content_items")
-          .insert({
-            prompt_id: currentPrompt.id,
-            content_text: sampleContent,
-          })
-          .select()
+          .select("*")
+          .eq("id", response.contentId)
           .single();
           
-        if (error) throw error;
+        if (fetchError) throw fetchError;
         
         // Update local state
         setContentItems((prev) => [...prev, newContent]);
+      } else {
+        throw new Error("Failed to retrieve content ID");
       }
       
       // Switch tab to view content
@@ -192,55 +220,64 @@ const ContentGenerationStage: React.FC = () => {
       
       toast({
         title: "Content Generated",
-        description: "Content has been successfully created",
+        description: "AI content has been successfully created with Claude",
       });
     } catch (error) {
       console.error("Error generating content:", error);
       toast({
         title: "Error",
-        description: "Failed to generate content",
+        description: "Failed to generate content: " + (error.message || "Unknown error"),
         variant: "destructive",
       });
     } finally {
+      if (generationInterval) {
+        clearInterval(generationInterval);
+      }
       setIsGenerating(false);
+      setGenerationInterval(null);
     }
   };
-  
-  const generateSampleContent = (prompt: string, section: any) => {
-    // This is a placeholder that would normally call Claude API
-    // For demonstration, generate structured sample content
-    const title = section.title || "Untitled Section";
-    const objectives = section.config?.learningObjectives || ["Understand key concepts"];
+
+  const validateContent = async () => {
+    const currentContent = getCurrentSectionContent();
+    if (!currentContent || isValidating) return;
     
-    return `# ${title}
-
-## Learning Objectives
-${objectives.map((obj: string) => `- ${obj}`).join('\n')}
-
-## Introduction
-This section introduces students to essential concepts related to ${title.toLowerCase()}. Through interactive activities and clear explanations, students will develop a strong understanding of the subject matter.
-
-## Key Concepts
-1. **Fundamental Principles**: Understanding the basic principles that underpin ${title.toLowerCase()}.
-2. **Applied Knowledge**: How these concepts apply in real-world situations.
-3. **Critical Analysis**: Developing skills to analyze and evaluate information related to this topic.
-
-## Activities
-1. **Group Discussion**: Students work in small groups to discuss their understanding of key concepts.
-2. **Interactive Exercise**: Complete the worksheet on page 4 to practice applying these principles.
-3. **Reflection**: Write a short paragraph reflecting on how these concepts connect to previously learned material.
-
-## Assessment
-- Complete the review questions at the end of the section
-- Participation in group discussion
-- Quality of reflection writing
-
-## Additional Resources
-- Supplementary readings available in the appendix
-- Online interactive tools at education.example.com/${title.toLowerCase().replace(/\s/g, '-')}
-- Video demonstration of key concepts
-
-*Generated based on specified educational parameters and learning objectives*`;
+    try {
+      setIsValidating(true);
+      
+      // Call the validate-educational-content edge function
+      const { data: response, error } = await supabase.functions.invoke("validate-educational-content", {
+        body: {
+          contentId: currentContent.id,
+        },
+      });
+      
+      if (error) throw error;
+      
+      if (!response.success || !response.validation) {
+        throw new Error(response.error || "Failed to validate content");
+      }
+      
+      // Update local state with validation results
+      setValidations((prev) => ({ ...prev, [currentContent.id]: { 
+        ...response.validation,
+        id: response.contentId
+      }}));
+      
+      toast({
+        title: "Content Validated",
+        description: "Educational quality assessment complete",
+      });
+    } catch (error) {
+      console.error("Error validating content:", error);
+      toast({
+        title: "Error",
+        description: "Failed to validate content: " + (error.message || "Unknown error"),
+        variant: "destructive",
+      });
+    } finally {
+      setIsValidating(false);
+    }
   };
 
   const updateContent = async (newText: string) => {
@@ -377,13 +414,17 @@ This section introduces students to essential concepts related to ${title.toLowe
 
   const currentPrompt = getCurrentSectionPrompt();
   const currentContent = getCurrentSectionContent();
+  const currentValidation = currentContent ? validations[currentContent.id] : null;
 
   return (
     <ProjectStageLayout
       title="Content Generation"
-      description="Generate and refine AI-created educational content"
+      description="Generate and refine AI-created educational content with Claude"
       onNext={handleSubmit}
       isNextDisabled={!allContentApproved()}
+      isLoading={isGenerating}
+      loadingProgress={isGenerating ? generationProgress : undefined}
+      loadingMessage={isGenerating ? "Generating educational content with Claude AI..." : undefined}
     >
       {/* AI Content Generation Tour */}
       <GuidedTour
@@ -451,19 +492,12 @@ This section introduces students to essential concepts related to ${title.toLowe
                     {currentContent ? (
                       <ContentView 
                         content={currentContent}
-                        onUpdateContent={(text) => {
-                          // Update local state first
-                          setContentItems((prev) =>
-                            prev.map((c) =>
-                              c.id === currentContent.id
-                                ? { ...c, content_text: text, is_approved: false }
-                                : c
-                            )
-                          );
-                          updateContent(text);
-                        }}
+                        onUpdateContent={updateContent}
                         onRegenerateContent={generateContent}
                         onToggleApproval={toggleContentApproval}
+                        onValidateContent={validateContent}
+                        validation={currentValidation?.validation_data}
+                        isValidating={isValidating}
                       />
                     ) : (
                       <NoContentView onGoToPrompt={() => setActiveTab("prompt")} />

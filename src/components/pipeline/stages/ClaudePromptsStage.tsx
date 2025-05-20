@@ -101,96 +101,53 @@ const ClaudePromptsStage: React.FC = () => {
     try {
       setIsGenerating(true);
 
-      // Prepare data for prompt generation
-      const projectData = {
-        projectConfig: projectConfig?.config_data || {},
-        outline: outlineData?.structure || {},
-        sections: sections.map((section) => ({
-          id: section.id,
-          title: section.title,
-          description: section.description,
-          config: section.config || {},
-        })),
-      };
-
       toast({
         title: "Generating Prompts",
         description: "Starting to generate Claude AI prompts...",
       });
 
-      // In a real implementation, this would call a backend service
-      // Here we'll simulate the generation with a timeout
-      await new Promise((resolve) => setTimeout(resolve, 3000));
+      // Process each section to generate its prompt
+      for (const section of sections) {
+        try {
+          // Call the edge function to synthesize prompt
+          const { data: response, error } = await supabase.functions.invoke("synthesize-education-prompt", {
+            body: {
+              projectId,
+              sectionId: section.id,
+            },
+          });
 
-      // For demonstration purposes, generate example prompts
-      const generatedPrompts = sections.map((section) => {
-        // Create a sample prompt based on section content
-        const learningObjectives = section.config?.learningObjectives || [];
-        const objectivesText = learningObjectives.length > 0 
-          ? learningObjectives.map((obj: string) => `- ${obj}`).join("\n")
-          : "No specific learning objectives provided";
+          if (error) throw error;
           
-        const prompt = `Create educational content for section "${section.title}":
-
-# SECTION CONTEXT
-${section.description}
-
-# LEARNING OBJECTIVES
-${objectivesText}
-
-# KEY INSTRUCTIONAL APPROACH
-Use ${projectConfig?.config_data?.pedagogicalApproach?.teachingMethodology?.[0] || "engaging teaching methods"} with attention to ${projectConfig?.config_data?.culturalAccessibility?.languageComplexity || "appropriate"} language complexity.
-
-# REQUIRED ELEMENTS
-- Include ${section.config?.activityTypes?.[0] || "interactive activities"} 
-- Target audience: ${projectConfig?.config_data?.educationalContext?.gradeLevel?.[0] || "students"}
-- Subject area: ${projectConfig?.config_data?.educationalContext?.subjectArea?.[0] || "general education"}
-
-Please generate comprehensive, pedagogically sound content that meets these specific requirements.`;
-
-        return {
-          section_id: section.id,
-          prompt_text: prompt,
-          parameters: {
-            model: "claude-3-opus-20240229",
-            max_tokens: 4000,
-            temperature: 0.7,
-          },
-          is_generated: true,
-          is_approved: false,
-        };
-      });
-
-      // Insert generated prompts to database
-      for (const prompt of generatedPrompts) {
-        // Check if a prompt already exists for this section
-        const existingPromptIndex = prompts.findIndex(p => p.section_id === prompt.section_id);
-        
-        if (existingPromptIndex >= 0 && prompts[existingPromptIndex].id) {
-          // Update existing prompt
-          const { error } = await supabase
-            .from("prompts")
-            .update({
-              prompt_text: prompt.prompt_text,
-              parameters: prompt.parameters,
-              is_generated: true,
-              updated_at: new Date().toISOString(),
-            })
-            .eq("id", prompts[existingPromptIndex].id);
-            
-          if (error) throw error;
-        } else {
-          // Insert new prompt
-          const { error } = await supabase
-            .from("prompts")
-            .insert(prompt);
-            
-          if (error) throw error;
+          if (response.success && response.prompt) {
+            // If successful, update the prompt in local state
+            setPrompts((prev) =>
+              prev.map((p) =>
+                p.section_id === section.id
+                  ? { 
+                      ...p, 
+                      prompt_text: response.prompt, 
+                      parameters: response.parameters,
+                      is_generated: true,
+                      id: response.promptId || p.id 
+                    }
+                  : p
+              )
+            );
+          } else {
+            console.error("Error synthesizing prompt for section:", section.id);
+          }
+        } catch (sectionError) {
+          console.error("Error processing section:", section.id, sectionError);
+          // Continue with next section even if this one fails
         }
+        
+        // Small delay between sections to avoid rate limits
+        await new Promise((resolve) => setTimeout(resolve, 500));
       }
 
-      // Refresh prompts data
-      const { data: refreshedPrompts, error } = await supabase
+      // Refresh prompts data from database
+      const { data: refreshedPrompts, error: refreshError } = await supabase
         .from("prompts")
         .select("*")
         .in(
@@ -198,8 +155,11 @@ Please generate comprehensive, pedagogically sound content that meets these spec
           sections.map((s) => s.id)
         );
 
-      if (error) throw error;
-      setPrompts(refreshedPrompts);
+      if (refreshError) throw refreshError;
+      
+      if (refreshedPrompts && refreshedPrompts.length > 0) {
+        setPrompts(refreshedPrompts);
+      }
 
       toast({
         title: "Success",
@@ -209,7 +169,7 @@ Please generate comprehensive, pedagogically sound content that meets these spec
       console.error("Error generating prompts:", error);
       toast({
         title: "Error",
-        description: "Failed to generate prompts",
+        description: "Failed to generate prompts: " + (error.message || "Unknown error"),
         variant: "destructive",
       });
     } finally {
