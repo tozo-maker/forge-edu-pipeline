@@ -9,7 +9,7 @@ interface AuthContextType {
   session: Session | null;
   isLoading: boolean;
   signUp: (email: string, password: string, metadata: any) => Promise<void>;
-  signIn: (email: string, password: string) => Promise<void>;
+  signIn: (email: string, password: string) => Promise<any>; // Changed return type to 'any'
   signOut: () => Promise<void>;
 }
 
@@ -52,13 +52,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) throw error;
-      toast({
-        title: "Account created",
+      toast("Account created", {
         description: "Please check your email for the confirmation link.",
       });
     } catch (error: any) {
-      toast({
-        title: "Error",
+      toast("Error", {
         description: error.message || "Failed to sign up",
         variant: "destructive",
       });
@@ -78,15 +76,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
       if (error) throw error;
       
-      toast({
-        title: "Welcome back",
+      toast("Welcome back", {
         description: "You have successfully signed in",
       });
       
       return data;
     } catch (error: any) {
-      toast({
-        title: "Error",
+      toast("Error", {
         description: error.message || "Failed to sign in",
         variant: "destructive",
       });
@@ -101,13 +97,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setIsLoading(true);
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
-      toast({
-        title: "Signed out",
+      toast("Signed out", {
         description: "You have been signed out successfully",
       });
     } catch (error: any) {
-      toast({
-        title: "Error",
+      toast("Error", {
         description: error.message || "Failed to sign out",
         variant: "destructive",
       });

@@ -41,10 +41,7 @@ const LoginForm: React.FC = () => {
     try {
       setError(null);
       await signIn(values.email, values.password);
-      
-      // If login is successful, the AuthContext will handle session state
-      // and the App component will redirect authenticated users to the dashboard
-      toast.success("Logged in successfully!");
+      // If login is successful, navigate to dashboard
       navigate("/dashboard");
     } catch (error: any) {
       // Error is already displayed by AuthContext's toast
