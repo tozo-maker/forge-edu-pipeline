@@ -20,6 +20,7 @@ interface State {
   errorType: "api" | "ai" | "rendering" | "unknown";
   retryCount: number;
   isRetrying: boolean;
+  maxRetries: number; // Add maxRetries to the state
 }
 
 class ErrorBoundary extends Component<Props, State> {
@@ -34,6 +35,7 @@ class ErrorBoundary extends Component<Props, State> {
       errorType: "unknown",
       retryCount: 0,
       isRetrying: false,
+      maxRetries: props.maxRetries || 3, // Initialize from props with default
     };
   }
 
@@ -73,6 +75,11 @@ class ErrorBoundary extends Component<Props, State> {
   }
 
   componentDidUpdate(prevProps: Props, prevState: State) {
+    // Update maxRetries if props change
+    if (this.props.maxRetries !== prevProps.maxRetries) {
+      this.setState({ maxRetries: this.props.maxRetries || 3 });
+    }
+    
     // Auto-retry for API and AI errors with exponential backoff
     const { hasError, errorType, retryCount, isRetrying } = this.state;
     const { maxRetries = 3, aiContext, apiContext } = this.props;
@@ -82,7 +89,7 @@ class ErrorBoundary extends Component<Props, State> {
       hasError && 
       !prevState.hasError && 
       (errorType === "api" || errorType === "ai") &&
-      retryCount < maxRetries &&
+      retryCount < this.state.maxRetries &&
       !isRetrying
     ) {
       this.attemptRetryWithBackoff();
@@ -97,9 +104,8 @@ class ErrorBoundary extends Component<Props, State> {
 
   attemptRetryWithBackoff = () => {
     const { retryCount } = this.state;
-    const { maxRetries = 3 } = this.props;
     
-    if (retryCount >= maxRetries) return;
+    if (retryCount >= this.state.maxRetries) return;
     
     // Calculate backoff time (exponential: 1s, 2s, 4s, 8s, etc.)
     const backoffTime = Math.pow(2, retryCount) * 1000;
@@ -131,7 +137,7 @@ class ErrorBoundary extends Component<Props, State> {
 
       const isApiError = this.props.apiContext || this.state.errorType === "api";
       const isAiError = this.props.aiContext || this.state.errorType === "ai";
-      const { isRetrying, retryCount, maxRetries } = this.state;
+      const { isRetrying, retryCount } = this.state;
       
       return (
         <Alert variant="destructive" className="my-4 border-2">
@@ -164,7 +170,7 @@ class ErrorBoundary extends Component<Props, State> {
             {isRetrying ? (
               <div className="flex items-center text-sm text-muted-foreground">
                 <RefreshCw className="h-4 w-4 mr-2 animate-spin" /> 
-                Attempting to recover... (Retry {retryCount}/{maxRetries})
+                Attempting to recover... (Retry {retryCount}/{this.state.maxRetries})
               </div>
             ) : (
               <div className="flex flex-wrap gap-2">

@@ -132,6 +132,11 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
     });
   };
 
+  // Check if current stage is related to AI operations
+  const isAIRelatedStage = React.useMemo(() => {
+    return currentStage === "content_generation" || currentStage === "validation";
+  }, [currentStage]);
+
   if (projectsLoading || !project) {
     return (
       <div className="flex h-full items-center justify-center">
@@ -170,7 +175,7 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
           <CardContent className={isMobile ? "px-4 py-3" : "py-3"}>
             <ErrorBoundary 
               onReset={resetErrorBoundary}
-              aiContext={currentStage === "content_generation" || currentStage === "validation"}
+              aiContext={isAIRelatedStage}
               maxRetries={3}
             >
               {isLoading && loadingProgress !== undefined ? (

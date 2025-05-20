@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { 
   Dialog,
@@ -13,6 +12,7 @@ import { useToast } from '@/hooks/use-toast';
 import { ArrowRight, ArrowLeft, X, Info, Play, Sparkles } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-mobile';
 import { Progress } from '@/components/ui/progress';
+import { cn } from '@/lib/utils';
 
 export interface TourStep {
   title: string;
@@ -260,8 +260,11 @@ const GuidedTour: React.FC<GuidedTourProps> = ({
         {/* Progress bar */}
         <Progress 
           value={progress} 
-          className="h-1 w-full" 
-          indicatorClassName={themeStyles.progressClass} 
+          className="h-1 w-full"
+        />
+        <div 
+          className={cn("h-1 -mt-1 rounded-full", themeStyles.progressClass)} 
+          style={{ width: `${progress}%`, transition: 'width 0.3s ease-in-out' }} 
         />
         
         {steps[currentStep]?.image && (
