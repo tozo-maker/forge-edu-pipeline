@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -79,7 +78,10 @@ const SectionDetailsStage: React.FC = () => {
           loadSectionForm(sectionsData[0], 0);
         } else {
           // Create initial sections based on key topics from outline
-          const initialSections = (outlineData.structure.keyTopics || []).map((topic: string, index: number) => ({
+          // Properly type cast the structure field as a Record
+          const structure = outlineData.structure as Record<string, any>;
+          const keyTopics = structure.keyTopics || [];
+          const initialSections = keyTopics.map((topic: string, index: number) => ({
             title: topic,
             description: "",
             order_index: index + 1,

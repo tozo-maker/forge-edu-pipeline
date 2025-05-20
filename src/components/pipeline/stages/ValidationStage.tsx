@@ -24,6 +24,39 @@ import {
   Check
 } from "lucide-react";
 
+// Define explicit typing for sections and prompts
+interface Section {
+  id: string;
+  title: string;
+  description: string;
+  order_index: number;
+  outline_id: string;
+  config: Record<string, any>;
+}
+
+interface Prompt {
+  id: string;
+  section_id: string;
+  prompt_text: string;
+  content_id?: string;
+}
+
+interface ContentItem {
+  id: string;
+  prompt_id: string;
+  content_text: string;
+}
+
+interface Validation {
+  id?: string;
+  content_id: string;
+  validation_data: Record<string, any>;
+  quality_score: number | null;
+  standards_alignment_score: number | null;
+  improvement_suggestions: string;
+  is_approved: boolean;
+}
+
 const ValidationStage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
   const { toast } = useToast();
@@ -31,11 +64,12 @@ const ValidationStage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(true);
   const [isValidating, setIsValidating] = useState(false);
   const [activeTab, setActiveTab] = useState("content");
-  const [sections, setSections] = useState<any[]>([]);
-  const [contentItems, setContentItems] = useState<any[]>([]);
-  const [validations, setValidations] = useState<any[]>([]);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [contentItems, setContentItems] = useState<ContentItem[]>([]);
+  const [validations, setValidations] = useState<Validation[]>([]);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [projectStandards, setProjectStandards] = useState<string[]>([]);
+  const [prompts, setPrompts] = useState<Prompt[]>([]);
 
   // Fetch all data
   useEffect(() => {
@@ -52,8 +86,12 @@ const ValidationStage: React.FC = () => {
           
         if (configError && configError.code !== "PGRST116") throw configError;
         
-        if (projectConfig?.config_data?.educationalContext?.standards) {
-          setProjectStandards(projectConfig.config_data.educationalContext.standards);
+        if (projectConfig) {
+          // Type cast config_data as a Record to access properties safely
+          const configData = projectConfig.config_data as Record<string, any>;
+          if (configData?.educationalContext?.standards) {
+            setProjectStandards(configData.educationalContext.standards);
+          }
         }
         
         // Get outline
@@ -73,10 +111,10 @@ const ValidationStage: React.FC = () => {
           .order("order_index", { ascending: true });
           
         if (sectionsError) throw sectionsError;
-        setSections(sectionsData);
+        setSections(sectionsData as Section[]);
         
         // Get prompts to link to content items
-        const { data: prompts, error: promptsError } = await supabase
+        const { data: promptsData, error: promptsError } = await supabase
           .from("prompts")
           .select("*")
           .in(
@@ -85,6 +123,7 @@ const ValidationStage: React.FC = () => {
           );
           
         if (promptsError) throw promptsError;
+        setPrompts(promptsData as Prompt[]);
         
         // Get content items
         const { data: contentData, error: contentError } = await supabase
@@ -92,7 +131,7 @@ const ValidationStage: React.FC = () => {
           .select("*")
           .in(
             "prompt_id",
-            prompts.map(p => p.id)
+            promptsData.map(p => p.id)
           );
           
         if (contentError) throw contentError;
@@ -104,14 +143,14 @@ const ValidationStage: React.FC = () => {
           .select("*")
           .in(
             "content_id",
-            contentData.map(c => c.id)
+            contentData.map((c: ContentItem) => c.id)
           );
           
         if (validationsError) throw validationsError;
         
         // If no validations exist yet, initialize empty ones
         if (!validationsData || validationsData.length === 0) {
-          const initialValidations = contentData.map(content => ({
+          const initialValidations = contentData.map((content: ContentItem) => ({
             content_id: content.id,
             validation_data: {},
             quality_score: null,
@@ -145,6 +184,7 @@ const ValidationStage: React.FC = () => {
     if (!sections.length) return null;
     
     const currentSection = sections[currentSectionIndex];
+    // Find prompt for current section
     const sectionPrompt = prompts.find(p => p.section_id === currentSection?.id);
     
     return sectionPrompt 
@@ -163,10 +203,6 @@ const ValidationStage: React.FC = () => {
   const currentSection = sections[currentSectionIndex];
   const currentContent = getCurrentSectionContent();
   const currentValidation = getCurrentValidation();
-  const prompts = contentItems.map(content => {
-    const matchingPrompt = content.prompt_id;
-    return { id: matchingPrompt, content_id: content.id };
-  });
 
   // Run validation for current section
   const runValidation = async () => {
@@ -421,6 +457,26 @@ const ValidationStage: React.FC = () => {
     return (validatedCount / contentItems.length) * 50 + (approvedCount / contentItems.length) * 50;
   };
 
+  // Find validation status for a section
+  const getSectionValidationStatus = (sectionId: string) => {
+    // Find prompt for this section
+    const sectionPrompt = prompts.find(p => p.section_id === sectionId);
+    if (!sectionPrompt) return "pending";
+    
+    // Find content for this prompt
+    const sectionContent = contentItems.find(c => c.prompt_id === sectionPrompt.id);
+    if (!sectionContent) return "pending";
+    
+    // Find validation for this content
+    const sectionValidation = validations.find(v => v.content_id === sectionContent.id);
+    if (!sectionValidation) return "pending";
+    
+    if (sectionValidation.is_approved) return "approved";
+    if (sectionValidation.quality_score !== null) return "validated";
+    
+    return "pending";
+  };
+
   if (isLoading) {
     return (
       <ProjectStageLayout
@@ -452,20 +508,7 @@ const ValidationStage: React.FC = () => {
             <CardContent className="py-2 px-3 space-y-1">
               {sections.map((section, index) => {
                 // Find validation status for this section
-                const sectionPrompt = prompts.find(p => p.section_id === section.id);
-                const sectionContent = sectionPrompt 
-                  ? contentItems.find(c => c.prompt_id === sectionPrompt.content_id)
-                  : null;
-                const sectionValidation = sectionContent 
-                  ? validations.find(v => v.content_id === sectionContent.id)
-                  : null;
-                  
-                let status = "pending";
-                if (sectionValidation?.is_approved) {
-                  status = "approved";
-                } else if (sectionValidation?.quality_score !== null) {
-                  status = "validated";
-                }
+                const status = getSectionValidationStatus(section.id);
                 
                 return (
                   <div

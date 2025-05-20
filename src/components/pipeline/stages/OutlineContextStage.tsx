@@ -62,11 +62,13 @@ const OutlineContextStage: React.FC = () => {
 
         if (data) {
           setOutlineData(data);
+          // Properly type cast the JSON structure field
+          const structure = data.structure as Record<string, any>;
           form.reset({
-            summary: data.structure.summary || "",
-            audience: data.structure.audience || "",
-            learningGoals: data.structure.learningGoals || "",
-            keyTopics: data.structure.keyTopics || [],
+            summary: structure.summary || "",
+            audience: structure.audience || "",
+            learningGoals: structure.learningGoals || "",
+            keyTopics: structure.keyTopics || [],
           });
         }
       } catch (error) {

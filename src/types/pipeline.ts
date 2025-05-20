@@ -159,8 +159,8 @@ export type ContentItem = {
 export type ValidationResult = {
   content_id: string;
   validation_data: Record<string, any>;
-  quality_score: number;
-  standards_alignment_score: number;
+  quality_score: number | null;
+  standards_alignment_score: number | null;
   improvement_suggestions: string;
   is_approved: boolean;
 };
