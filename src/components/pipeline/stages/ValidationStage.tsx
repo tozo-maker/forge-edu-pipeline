@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import ProjectStageLayout from "@/components/pipeline/ProjectStageLayout";
@@ -6,7 +5,6 @@ import { Card, CardHeader, CardTitle, CardContent, CardDescription, CardFooter }
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { Textarea } from "@/components/ui/textarea";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { supabase } from "@/integrations/supabase/client";
@@ -18,7 +16,6 @@ import {
   CheckCircle,
   XCircle,
   Edit,
-  Download,
   CheckSquare,
   AlertCircle,
   Check
@@ -152,7 +149,7 @@ const ValidationStage: React.FC = () => {
         if (!validationsData || validationsData.length === 0) {
           const initialValidations = contentData.map((content: ContentItem) => ({
             content_id: content.id,
-            validation_data: {},
+            validation_data: {} as Record<string, any>,
             quality_score: null,
             standards_alignment_score: null,
             improvement_suggestions: "",
@@ -161,7 +158,12 @@ const ValidationStage: React.FC = () => {
           
           setValidations(initialValidations);
         } else {
-          setValidations(validationsData);
+          // Convert the Json type to Record<string, any> when setting validation data
+          const typedValidations = validationsData.map(v => ({
+            ...v,
+            validation_data: v.validation_data as unknown as Record<string, any>
+          }));
+          setValidations(typedValidations);
         }
         
       } catch (error) {
@@ -238,7 +240,7 @@ const ValidationStage: React.FC = () => {
         suggestions += "- This content meets high quality standards. Consider adding extension activities for advanced learners.\n";
       }
       
-      const validationData = {
+      const validationData: Record<string, any> = {
         content_analysis: {
           readability_level: Math.random() > 0.5 ? "Appropriate" : "Slightly advanced",
           educational_completeness: Math.random() > 0.7 ? "Complete" : "Needs minor additions",
@@ -299,8 +301,12 @@ const ValidationStage: React.FC = () => {
           
         if (error) throw error;
         
-        // Update local state
-        setValidations(prev => [...prev, newValidation]);
+        // Update local state with proper typing
+        const typedNewValidation: Validation = {
+          ...newValidation,
+          validation_data: newValidation.validation_data as unknown as Record<string, any>
+        };
+        setValidations(prev => [...prev, typedNewValidation]);
       }
       
       toast({

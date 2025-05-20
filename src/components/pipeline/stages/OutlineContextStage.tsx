@@ -1,5 +1,5 @@
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -8,13 +8,12 @@ import ProjectStageLayout from "@/components/pipeline/ProjectStageLayout";
 import { Form, FormField, FormItem, FormLabel, FormControl, FormDescription, FormMessage } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Label } from "@/components/ui/label";
 import { Button } from "@/components/ui/button";
 import { useProjects } from "@/hooks/useProjects";
 import { supabase } from "@/integrations/supabase/client";
 import { useToast } from "@/hooks/use-toast";
 import { Plus, X } from "lucide-react";
+import { OutlineStructure } from "@/types/pipeline";
 
 const outlineSchema = z.object({
   summary: z.string().min(10, "Please provide a summary of at least 10 characters"),
@@ -43,7 +42,7 @@ const OutlineContextStage: React.FC = () => {
     }
   });
 
-  React.useEffect(() => {
+  useEffect(() => {
     const fetchOutline = async () => {
       if (!projectId) return;
 
@@ -68,7 +67,7 @@ const OutlineContextStage: React.FC = () => {
             summary: structure.summary || "",
             audience: structure.audience || "",
             learningGoals: structure.learningGoals || "",
-            keyTopics: structure.keyTopics || [],
+            keyTopics: Array.isArray(structure.keyTopics) ? structure.keyTopics : [],
           });
         }
       } catch (error) {
@@ -100,13 +99,13 @@ const OutlineContextStage: React.FC = () => {
     );
   };
 
-  const handleSubmit = async (values: z.infer<typeof outlineSchema>) => {
+  const handleSubmit = async (values: z.infer<typeof outlineSchema>): Promise<boolean> => {
     if (!projectId) return false;
 
     setIsSubmitting(true);
 
     try {
-      const structureData = {
+      const structureData: OutlineStructure = {
         summary: values.summary,
         audience: values.audience,
         learningGoals: values.learningGoals,
