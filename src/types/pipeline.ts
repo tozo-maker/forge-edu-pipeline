@@ -60,15 +60,28 @@ export const PIPELINE_STAGES: PipelineStageInfo[] = [
   }
 ];
 
+export interface StageValidation {
+  canProgress: boolean;
+  message?: string;
+  issues?: string[];
+}
+
+export interface StageComponent {
+  validate: () => Promise<StageValidation>;
+  saveProgress: () => Promise<boolean>;
+}
+
+// Project and user types
 export type Project = {
   id: string;
   title: string;
   description: string;
   created_at: string;
   updated_at: string;
-  current_stage: PipelineStage;
+  pipeline_status: PipelineStage;
   completion_percentage: number;
   user_id: string;
+  config_dna?: Record<string, any>;
 };
 
 export type User = {
@@ -81,4 +94,73 @@ export type User = {
     grade_levels: string[];
     teaching_style: string;
   };
+};
+
+// Stage-specific types
+export type ProjectConfig = {
+  projectType: 'lesson_plan' | 'course_module' | 'assessment' | 'activity' | 'curriculum';
+  educationalContext: {
+    gradeLevel: string[];
+    subjectArea: string[];
+    standards: string[];
+  };
+  learningObjectives: {
+    text: string;
+    bloomsLevel: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+  }[];
+  pedagogicalApproach: {
+    teachingMethodology: string[];
+    assessmentPhilosophy: string;
+    differentiationStrategies: string[];
+  };
+  culturalAccessibility: {
+    languageComplexity: 'simple' | 'moderate' | 'advanced';
+    culturalInclusion: string[];
+    accessibilityNeeds: string[];
+  };
+  contentStructure: {
+    organizationPattern: 'sequential' | 'hierarchical' | 'modular';
+    contentSections: { title: string; description: string; sequence: number }[];
+    estimatedDuration: string;
+  };
+};
+
+export type OutlineStructure = {
+  summary: string;
+  audience: string;
+  learningGoals: string;
+  keyTopics: string[];
+};
+
+export type SectionDetail = {
+  title: string;
+  description: string;
+  learningObjectives: string[];
+  activityTypes: string[];
+  resources: string[];
+  notes?: string;
+};
+
+export type Prompt = {
+  section_id: string;
+  prompt_text: string;
+  parameters: Record<string, any>;
+  is_generated: boolean;
+  is_approved: boolean;
+};
+
+export type ContentItem = {
+  prompt_id: string;
+  content_text: string;
+  is_approved: boolean;
+  metadata: Record<string, any>;
+};
+
+export type ValidationResult = {
+  content_id: string;
+  validation_data: Record<string, any>;
+  quality_score: number;
+  standards_alignment_score: number;
+  improvement_suggestions: string;
+  is_approved: boolean;
 };

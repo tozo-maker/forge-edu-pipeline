@@ -14,9 +14,17 @@ import Onboarding from "./pages/Onboarding";
 import PipelineIntro from "./pages/PipelineIntro";
 import Dashboard from "./pages/Dashboard";
 import Projects from "./pages/Projects";
-import ProjectWizard from "./pages/ProjectWizard"; // Add this import
+import ProjectWizard from "./pages/ProjectWizard";
+import ProjectDetails from "./pages/ProjectDetails";
 import NotFound from "./pages/NotFound";
 import { useAuth } from "./contexts/AuthContext";
+
+// Pipeline stage components
+import OutlineContextStage from "./components/pipeline/stages/OutlineContextStage";
+import SectionDetailsStage from "./components/pipeline/stages/SectionDetailsStage";
+import ClaudePromptsStage from "./components/pipeline/stages/ClaudePromptsStage";
+import ContentGenerationStage from "./components/pipeline/stages/ContentGenerationStage";
+import ValidationStage from "./components/pipeline/stages/ValidationStage";
 
 const queryClient = new QueryClient();
 
@@ -51,6 +59,16 @@ const AppRoutes = () => {
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
       <Route path="/projects/new" element={<ProtectedRoute><ProjectWizard /></ProtectedRoute>} />
+      
+      {/* Project and pipeline stages routes */}
+      <Route path="/projects/:projectId" element={<ProtectedRoute><ProjectDetails /></ProtectedRoute>} />
+      <Route path="/projects/:projectId/project_config" element={<ProtectedRoute><ProjectWizard /></ProtectedRoute>} />
+      <Route path="/projects/:projectId/outline_context" element={<ProtectedRoute><OutlineContextStage /></ProtectedRoute>} />
+      <Route path="/projects/:projectId/section_details" element={<ProtectedRoute><SectionDetailsStage /></ProtectedRoute>} />
+      <Route path="/projects/:projectId/claude_prompts" element={<ProtectedRoute><ClaudePromptsStage /></ProtectedRoute>} />
+      <Route path="/projects/:projectId/content" element={<ProtectedRoute><ContentGenerationStage /></ProtectedRoute>} />
+      <Route path="/projects/:projectId/validation" element={<ProtectedRoute><ValidationStage /></ProtectedRoute>} />
+      
       <Route path="*" element={<NotFound />} />
     </Routes>
   );
