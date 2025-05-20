@@ -58,7 +58,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       toast("Error", {
         description: error.message || "Failed to sign up",
-        variant: "destructive",
       });
       throw error;
     } finally {
@@ -84,7 +83,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       toast("Error", {
         description: error.message || "Failed to sign in",
-        variant: "destructive",
       });
       throw error;
     } finally {
@@ -103,7 +101,6 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     } catch (error: any) {
       toast("Error", {
         description: error.message || "Failed to sign out",
-        variant: "destructive",
       });
       throw error;
     } finally {
