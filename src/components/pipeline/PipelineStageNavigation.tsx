@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect } from "react";
+import React from "react";
 import { useNavigate } from "react-router-dom";
 import { PIPELINE_STAGES, PipelineStage } from "@/types/pipeline";
 import { Button } from "@/components/ui/button";
@@ -36,7 +36,8 @@ const PipelineStageNavigation: React.FC<PipelineStageNavigationProps> = ({
   className,
 }) => {
   const navigate = useNavigate();
-  const isMobile = useMediaQuery("(max-width: 768px)");
+  const isMobile = useMediaQuery("sm");
+  const isTablet = useMediaQuery("md") && !useMediaQuery("sm");
 
   const handleStageClick = (stage: PipelineStage) => {
     // If there's a custom handler, use that
@@ -69,17 +70,17 @@ const PipelineStageNavigation: React.FC<PipelineStageNavigationProps> = ({
     const currentStageInfo = PIPELINE_STAGES.find(s => s.id === currentStage);
     
     return (
-      <div className={cn("w-full py-4", className)}>
+      <div className={cn("w-full py-3", className)}>
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
-            <Button className="w-full flex justify-between items-center">
-              <span>
+            <Button className="w-full flex justify-between items-center bg-white">
+              <span className="truncate">
                 {currentStageInfo?.position}. {currentStageInfo?.title}
               </span>
-              <Menu className="h-4 w-4 ml-2" />
+              <Menu className="h-4 w-4 ml-2 flex-shrink-0" />
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent className="w-full max-w-[300px] bg-white">
+          <DropdownMenuContent className="w-[calc(100vw-2rem)] max-w-[300px] bg-white">
             {PIPELINE_STAGES.map((stage) => {
               const isCompleted = completedStages.includes(stage.id);
               const isCurrent = currentStage === stage.id;
@@ -103,7 +104,7 @@ const PipelineStageNavigation: React.FC<PipelineStageNavigationProps> = ({
                       <span className="text-xs">{stage.position}</span>
                     )}
                   </span>
-                  {stage.title}
+                  <span className="truncate">{stage.title}</span>
                   {!isAccessible && !isCompleted && !isCurrent && (
                     <LockIcon className="ml-auto h-3 w-3 text-gray-400" />
                   )}
@@ -123,6 +124,61 @@ const PipelineStageNavigation: React.FC<PipelineStageNavigationProps> = ({
             }}
             transition={{ duration: 0.5 }}
           />
+        </div>
+      </div>
+    );
+  }
+  
+  // Tablet version - simplified but not a dropdown
+  if (isTablet) {
+    return (
+      <div className={cn("w-full py-4", className)}>
+        <div className="relative flex items-center justify-between">
+          {/* Progress Bar Background */}
+          <div className="absolute left-0 top-1/2 h-1 w-full -translate-y-1/2 bg-gray-200 rounded"></div>
+          
+          {/* Progress Bar Fill */}
+          <motion.div 
+            className="absolute left-0 top-1/2 h-1 bg-primary -translate-y-1/2 rounded"
+            initial={{ width: "0%" }}
+            animate={{ 
+              width: `${(completedStages.length / (PIPELINE_STAGES.length - 1)) * 100}%` 
+            }}
+            transition={{ duration: 0.5 }}
+          />
+
+          {/* Stage Indicators - simplified for tablet */}
+          {PIPELINE_STAGES.map((stage) => {
+            const isCompleted = completedStages.includes(stage.id);
+            const isCurrent = currentStage === stage.id;
+            const isAccessible = isStageAccessible(stage.id);
+            
+            return (
+              <div key={stage.id} className="relative z-10">
+                <Button
+                  variant={isCurrent ? "default" : isCompleted ? "outline" : "ghost"}
+                  size="sm"
+                  className={cn(
+                    "h-8 w-8 rounded-full border-2 p-0",
+                    isCurrent && "border-primary bg-primary text-primary-foreground",
+                    isCompleted && "border-primary bg-primary/10 text-primary hover:bg-primary/20",
+                    !isAccessible && !isCompleted && !isCurrent && "opacity-50 cursor-not-allowed"
+                  )}
+                  disabled={!isAccessible && !isCompleted && !isCurrent}
+                  onClick={() => isAccessible || isCompleted ? handleStageClick(stage.id) : null}
+                >
+                  {isCompleted ? (
+                    <CheckIcon className="h-4 w-4" />
+                  ) : (
+                    <span className="text-xs font-medium">{stage.position}</span>
+                  )}
+                </Button>
+                {!isAccessible && !isCompleted && !isCurrent && (
+                  <LockIcon className="absolute -right-1 -top-1 h-3 w-3 text-gray-400" />
+                )}
+              </div>
+            );
+          })}
         </div>
       </div>
     );

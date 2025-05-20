@@ -11,6 +11,7 @@ import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import { Progress } from "@/components/ui/progress";
+import { useMediaQuery } from "@/hooks/use-mobile";
 
 interface ProjectStageLayoutProps {
   title: string;
@@ -39,6 +40,7 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
   const { projects, loading: projectsLoading, updateProject } = useProjects();
   const { toast } = useToast();
   const navigate = useNavigate();
+  const isMobile = useMediaQuery("md");
 
   const project = projects.find(p => p.id === projectId);
   const currentStage = stageId as PipelineStage || project?.pipeline_status || "project_config";
@@ -141,14 +143,15 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
   return (
     <div className="min-h-screen bg-gray-50">
       <DashboardHeader />
-      <main className="container mx-auto p-6">
-        <div className="mb-8">
+      <main className={`container mx-auto ${isMobile ? 'p-3' : 'p-6'}`}>
+        <div className="mb-6">
           <Button 
             variant="ghost" 
             onClick={() => navigate(`/projects/${projectId}`)}
-            className="mb-4"
+            className={isMobile ? "mb-2 px-2 text-sm" : "mb-4"}
+            size={isMobile ? "sm" : "default"}
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
+            <ArrowLeft className={`mr-1 h-${isMobile ? 3 : 4} w-${isMobile ? 3 : 4}`} />
             Back to Project
           </Button>
           
@@ -159,13 +162,17 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
           />
         </div>
         
-        <Card className="mb-8">
-          <CardHeader>
+        <Card className="mb-6">
+          <CardHeader className={isMobile ? "px-4 py-3" : "py-3"}>
             <CardTitle>{title}</CardTitle>
             <CardDescription>{description}</CardDescription>
           </CardHeader>
-          <CardContent>
-            <ErrorBoundary onReset={resetErrorBoundary}>
+          <CardContent className={isMobile ? "px-4 py-3" : "py-3"}>
+            <ErrorBoundary 
+              onReset={resetErrorBoundary}
+              aiContext={currentStage === "content_generation" || currentStage === "validation"}
+              maxRetries={3}
+            >
               {isLoading && loadingProgress !== undefined ? (
                 <div className="my-4 space-y-2">
                   <Progress value={loadingProgress} className="h-2" />
@@ -177,27 +184,31 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
           </CardContent>
         </Card>
         
-        <div className="flex justify-between">
+        <div className={`flex ${isMobile ? 'flex-col space-y-2' : 'justify-between'}`}>
           <Button 
             variant="outline" 
             onClick={handlePreviousStage}
+            className={isMobile ? "w-full" : ""}
+            size={isMobile ? "sm" : "default"}
           >
-            <ArrowLeft className="mr-2 h-4 w-4" />
+            <ArrowLeft className={`mr-2 h-${isMobile ? 3 : 4} w-${isMobile ? 3 : 4}`} />
             Previous
           </Button>
           <Button 
             onClick={handleNextStage} 
             disabled={isNextDisabled || isLoading}
+            className={isMobile ? "w-full" : ""}
+            size={isMobile ? "sm" : "default"}
           >
             {isLoading ? (
               <>
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                <Loader2 className={`mr-2 h-${isMobile ? 3 : 4} w-${isMobile ? 3 : 4} animate-spin`} />
                 {loadingMessage || "Processing..."}
               </>
             ) : (
               <>
                 Next
-                <ArrowRight className="ml-2 h-4 w-4" />
+                <ArrowRight className={`ml-2 h-${isMobile ? 3 : 4} w-${isMobile ? 3 : 4}`} />
               </>
             )}
           </Button>

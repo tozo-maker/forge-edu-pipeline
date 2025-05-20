@@ -2,25 +2,18 @@
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import ProjectStageLayout from "@/components/pipeline/ProjectStageLayout";
-import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
-import { Textarea } from "@/components/ui/textarea";
-import { Badge } from "@/components/ui/badge";
-import { Progress } from "@/components/ui/progress";
 import { supabase } from "@/integrations/supabase/client";
-import { 
-  Loader2, 
-  Play, 
-  Sparkles, 
-  Check, 
-  RefreshCw,
-  FileText, 
-  AlertCircle,
-  PauseCircle,
-  CheckCircle
-} from "lucide-react";
+import { Loader2, Check, AlertCircle } from "lucide-react";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
+import SectionsList from "@/components/pipeline/content-generation/SectionsList";
+import PromptView from "@/components/pipeline/content-generation/PromptView";
+import ContentView from "@/components/pipeline/content-generation/ContentView";
+import NoContentView from "@/components/pipeline/content-generation/NoContentView";
+import GuidedTour, { AI_CONTENT_GENERATION_TOUR } from "@/components/common/GuidedTour";
+import { useMediaQuery } from "@/hooks/use-mobile";
 
 const ContentGenerationStage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -33,6 +26,8 @@ const ContentGenerationStage: React.FC = () => {
   const [contentItems, setContentItems] = useState<any[]>([]);
   const [currentSectionIndex, setCurrentSectionIndex] = useState(0);
   const [activeTab, setActiveTab] = useState<string>("prompt");
+  const [showTour, setShowTour] = useState(false);
+  const isMobile = useMediaQuery("md");
 
   useEffect(() => {
     const fetchData = async () => {
@@ -87,6 +82,13 @@ const ContentGenerationStage: React.FC = () => {
           setActiveTab("content");
         }
 
+        // Show the tour if this is the first time visiting this stage
+        const tourShown = localStorage.getItem("eduforge_content_generation_tour_shown");
+        if (!tourShown) {
+          setShowTour(true);
+          localStorage.setItem("eduforge_content_generation_tour_shown", "true");
+        }
+
       } catch (error) {
         console.error("Error fetching data:", error);
         toast({
@@ -138,7 +140,7 @@ const ContentGenerationStage: React.FC = () => {
         });
       }, 1000);
       
-      // Simulate API call to Claude
+      // This would be replaced with actual API call to Claude
       await new Promise((resolve) => setTimeout(resolve, 5000));
       clearInterval(progressInterval);
       setGenerationProgress(100);
@@ -383,228 +385,105 @@ This section introduces students to essential concepts related to ${title.toLowe
       onNext={handleSubmit}
       isNextDisabled={!allContentApproved()}
     >
+      {/* AI Content Generation Tour */}
+      <GuidedTour
+        tourId="content_generation_tour"
+        steps={AI_CONTENT_GENERATION_TOUR}
+        autoStart={showTour}
+        aiContext={true}
+        theme="ai"
+      />
+      
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
         {/* Section sidebar */}
         <div className="md:col-span-1">
-          <Card>
-            <CardHeader className="py-3">
-              <CardTitle className="text-lg">Sections</CardTitle>
-            </CardHeader>
-            <CardContent className="py-2 px-3 space-y-1">
-              {sections.map((section, index) => {
-                const sectionPrompt = prompts.find(p => p.section_id === section.id);
-                const sectionContent = sectionPrompt 
-                  ? contentItems.find(c => c.prompt_id === sectionPrompt.id)
-                  : null;
-                  
-                let status = "pending";
-                if (sectionContent) {
-                  status = sectionContent.is_approved ? "approved" : "inProgress";
-                }
-                
-                return (
-                  <div
-                    key={section.id}
-                    className={`flex items-center justify-between p-2 rounded cursor-pointer ${
-                      index === currentSectionIndex
-                        ? "bg-primary text-primary-foreground"
-                        : "bg-gray-100 hover:bg-gray-200"
-                    }`}
-                    onClick={() => switchSection(index)}
-                  >
-                    <div className="truncate flex-1">
-                      <span className="mr-1 font-medium">{index + 1}.</span>
-                      {section.title || "Untitled Section"}
-                    </div>
-                    <div className="flex items-center">
-                      {status === "approved" && (
-                        <CheckCircle className="h-4 w-4 text-green-500 ml-2" />
-                      )}
-                      {status === "inProgress" && (
-                        <FileText className="h-4 w-4 text-amber-500 ml-2" />
-                      )}
-                      {status === "pending" && (
-                        <AlertCircle className="h-4 w-4 text-gray-400 ml-2" />
-                      )}
-                    </div>
-                  </div>
-                );
-              })}
-            </CardContent>
-            <CardFooter className="border-t pt-3 px-3">
-              <div className="w-full space-y-2">
-                <div className="flex justify-between text-xs text-gray-500">
-                  <span>Overall Progress</span>
-                  <span>{Math.round(getContentProgress())}%</span>
-                </div>
-                <Progress value={getContentProgress()} className="h-2" />
-              </div>
-            </CardFooter>
-          </Card>
+          <ErrorBoundary>
+            <SectionsList
+              sections={sections}
+              prompts={prompts}
+              contentItems={contentItems}
+              currentSectionIndex={currentSectionIndex}
+              onSectionSelect={switchSection}
+              getContentProgress={getContentProgress}
+            />
+          </ErrorBoundary>
         </div>
         
         {/* Content area */}
         <div className="md:col-span-3 space-y-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <CardTitle>
-                {sections[currentSectionIndex]?.title || "Section Content"}
-              </CardTitle>
-              <CardDescription>
-                {sections[currentSectionIndex]?.description || "Generate content for this section"}
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
-                <TabsList className="grid grid-cols-2">
-                  <TabsTrigger value="prompt">
-                    Prompt
-                    {currentPrompt?.is_approved && (
-                      <Check className="h-3 w-3 ml-1 text-green-500" />
-                    )}
-                  </TabsTrigger>
-                  <TabsTrigger value="content" disabled={!currentContent}>
-                    Content
-                    {currentContent?.is_approved && (
-                      <Check className="h-3 w-3 ml-1 text-green-500" />
-                    )}
-                  </TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="prompt" className="space-y-4">
-                  <div className="bg-gray-50 border rounded-md p-4 text-sm">
-                    <div className="flex items-center justify-between mb-2">
-                      <span className="font-medium">AI Prompt</span>
-                      {currentPrompt?.is_approved ? (
-                        <Badge variant="outline" className="bg-green-50 text-green-700">
-                          Approved
-                        </Badge>
-                      ) : (
-                        <Badge variant="outline" className="bg-amber-50 text-amber-700">
-                          Not Approved
-                        </Badge>
+          <ErrorBoundary aiContext>
+            <Card>
+              <CardHeader className="pb-2">
+                <CardTitle>
+                  {sections[currentSectionIndex]?.title || "Section Content"}
+                </CardTitle>
+                <CardDescription>
+                  {sections[currentSectionIndex]?.description || "Generate content for this section"}
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
+                  <TabsList className={isMobile ? "w-full grid-cols-2" : "grid grid-cols-2"}>
+                    <TabsTrigger value="prompt" className={isMobile ? "text-xs py-1 px-2" : ""}>
+                      Prompt
+                      {currentPrompt?.is_approved && (
+                        <Check className="h-3 w-3 ml-1 text-green-500" />
                       )}
-                    </div>
-                    <pre className="whitespace-pre-wrap font-mono text-xs">
-                      {currentPrompt?.prompt_text || "No prompt available for this section"}
-                    </pre>
-                  </div>
-                  
-                  <div className="flex justify-between">
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      disabled={!currentPrompt?.is_approved}
-                      onClick={generateContent}
-                    >
-                      <RefreshCw className="h-4 w-4 mr-2" />
-                      Regenerate
-                    </Button>
-                    <Button 
-                      size="sm" 
-                      disabled={!currentPrompt?.is_approved || isGenerating}
-                      onClick={generateContent} 
-                      className="gap-2"
-                    >
-                      {isGenerating ? (
-                        <>
-                          <Loader2 className="h-4 w-4 animate-spin" />
-                          Generating...
-                        </>
-                      ) : (
-                        <>
-                          <Play className="h-4 w-4" />
-                          Generate Content
-                        </>
+                    </TabsTrigger>
+                    <TabsTrigger value="content" disabled={!currentContent} className={isMobile ? "text-xs py-1 px-2" : ""}>
+                      Content
+                      {currentContent?.is_approved && (
+                        <Check className="h-3 w-3 ml-1 text-green-500" />
                       )}
-                    </Button>
-                  </div>
+                    </TabsTrigger>
+                  </TabsList>
                   
-                  {isGenerating && (
-                    <div className="space-y-2">
-                      <div className="flex justify-between text-xs text-gray-500">
-                        <span>Generation Progress</span>
-                        <span>{Math.round(generationProgress)}%</span>
-                      </div>
-                      <Progress value={generationProgress} className="h-2" />
-                    </div>
-                  )}
-                </TabsContent>
-                
-                <TabsContent value="content" className="space-y-4">
-                  {currentContent ? (
-                    <>
-                      <Textarea
-                        value={currentContent.content_text}
-                        onChange={(e) => {
+                  <TabsContent value="prompt">
+                    <PromptView
+                      prompt={currentPrompt}
+                      isGenerating={isGenerating}
+                      generationProgress={generationProgress}
+                      onGenerate={generateContent}
+                    />
+                  </TabsContent>
+                  
+                  <TabsContent value="content">
+                    {currentContent ? (
+                      <ContentView 
+                        content={currentContent}
+                        onUpdateContent={(text) => {
                           // Update local state first
                           setContentItems((prev) =>
                             prev.map((c) =>
                               c.id === currentContent.id
-                                ? { ...c, content_text: e.target.value, is_approved: false }
+                                ? { ...c, content_text: text, is_approved: false }
                                 : c
                             )
                           );
+                          updateContent(text);
                         }}
-                        onBlur={(e) => updateContent(e.target.value)}
-                        className="min-h-[400px] font-mono text-sm"
+                        onRegenerateContent={generateContent}
+                        onToggleApproval={toggleContentApproval}
                       />
-                      
-                      <div className="flex justify-between">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => generateContent()}
-                        >
-                          <RefreshCw className="h-4 w-4 mr-2" />
-                          Regenerate
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant={currentContent.is_approved ? "outline" : "default"}
-                          onClick={toggleContentApproval}
-                        >
-                          {currentContent.is_approved ? (
-                            <>
-                              <PauseCircle className="h-4 w-4 mr-2" />
-                              Unapprove
-                            </>
-                          ) : (
-                            <>
-                              <CheckCircle className="h-4 w-4 mr-2" />
-                              Approve Content
-                            </>
-                          )}
-                        </Button>
-                      </div>
-                    </>
-                  ) : (
-                    <div className="py-12 text-center">
-                      <Sparkles className="h-12 w-12 mx-auto mb-4 text-gray-400" />
-                      <h3 className="text-lg font-medium mb-2">No Content Yet</h3>
-                      <p className="text-gray-500 mb-4">
-                        Generate content from the approved prompt first
-                      </p>
-                      <Button onClick={() => setActiveTab("prompt")}>
-                        Go to Prompt
-                      </Button>
-                    </div>
-                  )}
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-          
-          {!allContentApproved() && activeTab === "content" && contentItems.length > 0 && (
-            <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-amber-800 text-sm">
-              <div className="flex items-center">
-                <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
-                <span>
-                  All content sections must be generated and approved before moving to the validation stage.
-                </span>
+                    ) : (
+                      <NoContentView onGoToPrompt={() => setActiveTab("prompt")} />
+                    )}
+                  </TabsContent>
+                </Tabs>
+              </CardContent>
+            </Card>
+            
+            {!allContentApproved() && activeTab === "content" && contentItems.length > 0 && (
+              <div className="bg-amber-50 border border-amber-200 rounded-md p-4 text-amber-800 text-sm">
+                <div className="flex items-center">
+                  <AlertCircle className="h-5 w-5 mr-2 flex-shrink-0" />
+                  <span>
+                    All content sections must be generated and approved before moving to the validation stage.
+                  </span>
+                </div>
               </div>
-            </div>
-          )}
+            )}
+          </ErrorBoundary>
         </div>
       </div>
     </ProjectStageLayout>

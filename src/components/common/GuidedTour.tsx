@@ -12,8 +12,9 @@ import { Button } from '@/components/ui/button';
 import { useToast } from '@/hooks/use-toast';
 import { ArrowRight, ArrowLeft, X, Info, Play, Sparkles } from 'lucide-react';
 import { useMediaQuery } from '@/hooks/use-mobile';
+import { Progress } from '@/components/ui/progress';
 
-interface TourStep {
+export interface TourStep {
   title: string;
   description: string;
   image?: string;
@@ -22,7 +23,7 @@ interface TourStep {
   spotlightClicks?: boolean; // Whether to allow clicks inside the spotlight
 }
 
-interface GuidedTourProps {
+export interface GuidedTourProps {
   tourId: string;  // Unique identifier for this tour
   steps: TourStep[];
   onComplete?: () => void;
@@ -30,9 +31,50 @@ interface GuidedTourProps {
   autoStart?: boolean; // Whether to start automatically
   showAgainAfterDays?: number; // If provided, will show again after X days even if completed
   aiContext?: boolean; // Whether this tour provides AI context specifically
+  theme?: 'light' | 'blue' | 'ai'; // Theme for the tour styling
 }
 
 const LOCAL_STORAGE_PREFIX = 'eduforge_tour_';
+
+// Predefined tour for AI content generation explanation
+export const AI_CONTENT_GENERATION_TOUR: TourStep[] = [
+  {
+    title: "Welcome to AI Content Generation",
+    description: "This tour will guide you through how EduForge AI creates educational content based on your input. Let's explore how the system uses your educational DNA to generate high-quality content."
+  },
+  {
+    title: "Understanding AI Prompts",
+    description: "AI prompts are automatically created based on your project configuration. These prompts ensure the content aligns with your educational goals, standards, and pedagogical approaches."
+  },
+  {
+    title: "Content Generation Process",
+    description: "When you click 'Generate Content', our AI processes your educational parameters and creates content tailored to your specifications. This typically takes 15-30 seconds per section."
+  },
+  {
+    title: "Reviewing and Editing",
+    description: "After generation, you can review and edit the content. You have complete control to refine the AI-generated material to perfectly match your teaching goals."
+  },
+  {
+    title: "Approving Content",
+    description: "Once you're satisfied with a section, click 'Approve Content'. You must approve all sections before proceeding to the validation stage."
+  }
+];
+
+// Predefined tour for content validation
+export const CONTENT_VALIDATION_TOUR: TourStep[] = [
+  {
+    title: "Content Validation",
+    description: "This stage verifies that your generated content meets educational standards and aligns with your original configuration."
+  },
+  {
+    title: "Quality Assessment",
+    description: "EduForge analyzes your content against educational best practices and provides improvement suggestions."
+  },
+  {
+    title: "Standards Alignment",
+    description: "The system checks that your content properly addresses the learning standards you specified in your configuration."
+  }
+];
 
 const GuidedTour: React.FC<GuidedTourProps> = ({ 
   tourId, 
@@ -41,12 +83,13 @@ const GuidedTour: React.FC<GuidedTourProps> = ({
   onSkip,
   autoStart = true,
   showAgainAfterDays,
-  aiContext = false
+  aiContext = false,
+  theme = 'light'
 }) => {
   const [isOpen, setIsOpen] = useState(false);
   const [currentStep, setCurrentStep] = useState(0);
   const { toast } = useToast();
-  const isMobile = useMediaQuery('(max-width: 768px)');
+  const isMobile = useMediaQuery('sm');
   
   // Store tour state in local storage
   const storageKey = `${LOCAL_STORAGE_PREFIX}${tourId}`;
@@ -169,12 +212,33 @@ const GuidedTour: React.FC<GuidedTourProps> = ({
       : steps[currentStep].title;
   }, [steps, currentStep, isMobile]);
 
+  // Theme-based styling
+  const themeStyles = useMemo(() => {
+    switch (theme) {
+      case 'blue':
+        return {
+          progressClass: 'bg-blue-600',
+          iconClass: 'text-blue-600'
+        };
+      case 'ai':
+        return {
+          progressClass: 'bg-purple-600',
+          iconClass: 'text-purple-600'
+        };
+      default:
+        return {
+          progressClass: 'bg-primary',
+          iconClass: 'text-primary'
+        };
+    }
+  }, [theme]);
+
   return (
     <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogContent className="sm:max-w-[500px]">
         <DialogHeader>
           <DialogTitle className="pr-10 flex items-center">
-            {aiContext && <Sparkles className="h-5 w-5 mr-2 text-blue-500" />}
+            {aiContext && <Sparkles className={`h-5 w-5 mr-2 ${themeStyles.iconClass}`} />}
             {responsiveTitle}
           </DialogTitle>
           <Button 
@@ -194,12 +258,11 @@ const GuidedTour: React.FC<GuidedTourProps> = ({
         </DialogHeader>
         
         {/* Progress bar */}
-        <div className="h-1 w-full bg-gray-200 rounded-full overflow-hidden">
-          <div 
-            className="h-full bg-primary transition-all duration-300 ease-in-out"
-            style={{ width: `${progress}%` }}
-          />
-        </div>
+        <Progress 
+          value={progress} 
+          className="h-1 w-full" 
+          indicatorClassName={themeStyles.progressClass} 
+        />
         
         {steps[currentStep]?.image && (
           <div className="my-4">
