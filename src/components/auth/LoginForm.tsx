@@ -1,5 +1,5 @@
 
-import React from "react";
+import React, { useState } from "react";
 import { z } from "zod";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -27,6 +27,7 @@ type FormValues = z.infer<typeof formSchema>;
 const LoginForm: React.FC = () => {
   const navigate = useNavigate();
   const { signIn, isLoading } = useAuth();
+  const [error, setError] = useState<string | null>(null);
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -37,8 +38,19 @@ const LoginForm: React.FC = () => {
   });
 
   const onSubmit = async (values: FormValues) => {
-    await signIn(values.email, values.password);
-    navigate("/dashboard");
+    try {
+      setError(null);
+      await signIn(values.email, values.password);
+      
+      // If login is successful, the AuthContext will handle session state
+      // and the App component will redirect authenticated users to the dashboard
+      toast.success("Logged in successfully!");
+      navigate("/dashboard");
+    } catch (error: any) {
+      // Error is already displayed by AuthContext's toast
+      setError("Invalid email or password. Please try again.");
+      console.error("Login error:", error);
+    }
   };
 
   return (
@@ -47,6 +59,12 @@ const LoginForm: React.FC = () => {
         <h2 className="text-2xl font-bold">Welcome Back</h2>
         <p className="text-sm text-gray-600">Sign in to continue creating educational content</p>
       </div>
+      
+      {error && (
+        <div className="mb-4 p-3 bg-red-50 text-red-700 rounded-md text-sm">
+          {error}
+        </div>
+      )}
       
       <Form {...form}>
         <form onSubmit={form.handleSubmit(onSubmit)} className="space-y-4">

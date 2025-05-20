@@ -22,6 +22,7 @@ import {
 } from "@/components/ui/select";
 import { Link, useNavigate } from "react-router-dom";
 import { toast } from "sonner";
+import { useAuth } from "@/contexts/AuthContext";
 
 const formSchema = z.object({
   name: z.string().min(2, { message: "Name must be at least 2 characters" }),
@@ -36,6 +37,7 @@ type FormValues = z.infer<typeof formSchema>;
 
 const RegisterForm: React.FC = () => {
   const navigate = useNavigate();
+  const { signUp, isLoading } = useAuth();
   
   const form = useForm<FormValues>({
     resolver: zodResolver(formSchema),
@@ -47,11 +49,29 @@ const RegisterForm: React.FC = () => {
     },
   });
 
-  const onSubmit = (values: FormValues) => {
-    // This would normally connect to authentication service
-    console.log("Registration submitted:", values);
-    toast.success("Registration successful!");
-    navigate("/onboarding");
+  const onSubmit = async (values: FormValues) => {
+    try {
+      const { name, email, password, role } = values;
+      
+      // Split name into first and last name
+      const nameParts = name.trim().split(' ');
+      const firstName = nameParts[0];
+      const lastName = nameParts.length > 1 ? nameParts.slice(1).join(' ') : '';
+      
+      // Create metadata object
+      const metadata = {
+        first_name: firstName,
+        last_name: lastName,
+        role: role
+      };
+      
+      await signUp(email, password, metadata);
+      toast.success("Registration successful! Please check your email for confirmation.");
+      navigate("/login");
+    } catch (error) {
+      // Error is already handled in the AuthContext
+      console.error("Registration error:", error);
+    }
   };
 
   return (
@@ -131,7 +151,9 @@ const RegisterForm: React.FC = () => {
             )}
           />
           
-          <Button type="submit" className="w-full">Sign Up</Button>
+          <Button type="submit" className="w-full" disabled={isLoading}>
+            {isLoading ? "Signing up..." : "Sign Up"}
+          </Button>
         </form>
       </Form>
       
