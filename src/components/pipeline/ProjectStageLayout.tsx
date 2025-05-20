@@ -1,4 +1,3 @@
-
 import React from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { PIPELINE_STAGES, PipelineStage } from "@/types/pipeline";
@@ -134,7 +133,9 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
 
   // Check if current stage is related to AI operations
   const isAIRelatedStage = React.useMemo(() => {
-    return currentStage === "content_generation" || currentStage === "validation";
+    // Using explicit type comparison with the PipelineStage type
+    return currentStage === ("content_generation" as PipelineStage) || 
+           currentStage === ("validation" as PipelineStage);
   }, [currentStage]);
 
   if (projectsLoading || !project) {
