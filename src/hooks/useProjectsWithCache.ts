@@ -1,9 +1,10 @@
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
 import { PipelineStage } from '@/types/pipeline';
 import { projectCache } from '@/utils/cache';
+import { useToast } from '@/hooks/use-toast';
 
 export type ProjectData = {
   id: string;
@@ -25,94 +26,164 @@ type ProjectCreateData = {
 
 export const useProjectsWithCache = (limit?: number) => {
   const { user } = useAuth();
+  const { toast } = useToast();
   const [projects, setProjects] = useState<ProjectData[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasAttemptedLoad, setHasAttemptedLoad] = useState(false);
 
-  useEffect(() => {
-    const fetchProjects = async () => {
-      if (!user) {
-        setProjects([]);
-        setLoading(false);
-        return;
-      }
+  const getCacheKey = useCallback(() => {
+    if (!user) return null;
+    return `projects_${user.id}_${limit || 'all'}`;
+  }, [user, limit]);
 
-      // Generate cache key based on user and limit
-      const cacheKey = `projects_${user.id}_${limit || 'all'}`;
-      
-      // Try to get data from cache first
+  const fetchProjects = useCallback(async (skipCache = false) => {
+    if (!user) {
+      setProjects([]);
+      setLoading(false);
+      setHasAttemptedLoad(true);
+      return;
+    }
+
+    // Generate cache key
+    const cacheKey = getCacheKey();
+    if (!cacheKey) return;
+    
+    // Try to get data from cache first (unless skipCache is true)
+    if (!skipCache) {
       const cachedData = projectCache.get<ProjectData[]>(cacheKey);
       if (cachedData) {
+        console.log("Using cached project data");
         setProjects(cachedData);
         setLoading(false);
         
-        // Refresh in background
-        refreshProjectsInBackground(cacheKey);
+        // Refresh in background without showing loading state
+        refreshProjectsInBackground();
+        setHasAttemptedLoad(true);
         return;
       }
+    }
 
-      try {
-        setLoading(true);
+    try {
+      setLoading(true);
+      console.log("Fetching fresh project data from API");
+      
+      let query = supabase
+        .from('projects')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+
+      if (limit) {
+        query = query.limit(limit);
+      }
+
+      const { data, error: fetchError } = await query;
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      const typedData = data as ProjectData[];
+      setProjects(typedData);
+      
+      // Store in cache with TTL
+      if (cacheKey) {
+        projectCache.set(cacheKey, typedData, { 
+          ttl: 2 * 60 * 1000, // 2 minute TTL
+          priority: 'high'
+        });
+      }
+      
+      setHasAttemptedLoad(true);
+    } catch (err: any) {
+      console.error('Error fetching projects:', err);
+      setError(err.message || 'Error fetching projects');
+      
+      // Show toast for API errors only if we've already attempted once
+      if (hasAttemptedLoad) {
+        toast({
+          title: "Error loading projects",
+          description: "Please try again or refresh the page",
+          variant: "destructive"
+        });
+      }
+    } finally {
+      setLoading(false);
+    }
+  }, [user, limit, hasAttemptedLoad, toast, getCacheKey]);
+
+  // Background refresh without showing loading state to user
+  const refreshProjectsInBackground = useCallback(async () => {
+    if (!user) return;
+    
+    const cacheKey = getCacheKey();
+    if (!cacheKey) return;
+    
+    try {
+      console.log("Refreshing projects in background");
+      
+      let query = supabase
+        .from('projects')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('updated_at', { ascending: false });
+
+      if (limit) {
+        query = query.limit(limit);
+      }
+
+      const { data, error: fetchError } = await query;
+
+      if (fetchError) {
+        throw fetchError;
+      }
+
+      const typedData = data as ProjectData[];
+      
+      // Only update state if data is different
+      const currentData = JSON.stringify(projects);
+      const newData = JSON.stringify(typedData);
+      
+      if (currentData !== newData) {
+        setProjects(typedData);
+        console.log("Updated projects from background refresh");
+      }
+      
+      // Update cache
+      projectCache.set(cacheKey, typedData, { 
+        ttl: 2 * 60 * 1000,
+        priority: 'high'
+      });
+    } catch (err: any) {
+      console.error('Error refreshing projects in background:', err);
+      // Don't update error state as this is a background refresh
+    }
+  }, [user, limit, projects, getCacheKey]);
+
+  useEffect(() => {
+    fetchProjects();
+    
+    // Set up cache refresh function
+    const cacheKey = getCacheKey();
+    if (cacheKey) {
+      projectCache.setRefreshFunction(cacheKey, async () => {
+        if (!user) return [];
+        
         let query = supabase
           .from('projects')
           .select('*')
           .eq('user_id', user.id)
           .order('updated_at', { ascending: false });
-
+  
         if (limit) {
           query = query.limit(limit);
         }
-
-        const { data, error: fetchError } = await query;
-
-        if (fetchError) {
-          throw fetchError;
-        }
-
-        const typedData = data as ProjectData[];
-        setProjects(typedData);
-        
-        // Store in cache with 2 minute TTL
-        projectCache.set(cacheKey, typedData, { ttl: 2 * 60 * 1000 });
-      } catch (err: any) {
-        console.error('Error fetching projects:', err);
-        setError(err.message || 'Error fetching projects');
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    // Background refresh without showing loading state to user
-    const refreshProjectsInBackground = async (cacheKey: string) => {
-      try {
-        let query = supabase
-          .from('projects')
-          .select('*')
-          .eq('user_id', user!.id)
-          .order('updated_at', { ascending: false });
-
-        if (limit) {
-          query = query.limit(limit);
-        }
-
-        const { data, error: fetchError } = await query;
-
-        if (fetchError) {
-          throw fetchError;
-        }
-
-        const typedData = data as ProjectData[];
-        setProjects(typedData);
-        
-        // Update cache
-        projectCache.set(cacheKey, typedData, { ttl: 2 * 60 * 1000 });
-      } catch (err: any) {
-        console.error('Error refreshing projects in background:', err);
-        // Don't update error state as this is a background refresh
-      }
-    };
-
-    fetchProjects();
+  
+        const { data } = await query;
+        return data as ProjectData[];
+      }, 2 * 60 * 1000); // Refresh every 2 minutes
+    }
 
     // Set up real-time subscription
     const projectsSubscription = supabase
@@ -128,9 +199,12 @@ export const useProjectsWithCache = (limit?: number) => {
           console.log('Change received!', payload);
           // Clear cache on any changes
           if (user) {
-            projectCache.remove(`projects_${user.id}_${limit || 'all'}`);
+            const cacheKey = getCacheKey();
+            if (cacheKey) {
+              projectCache.remove(cacheKey);
+            }
           }
-          fetchProjects();
+          fetchProjects(true); // Skip cache on realtime updates
         }
       )
       .subscribe();
@@ -138,7 +212,7 @@ export const useProjectsWithCache = (limit?: number) => {
     return () => {
       supabase.removeChannel(projectsSubscription);
     };
-  }, [user, limit]);
+  }, [user, limit, fetchProjects, getCacheKey]);
 
   const createProject = async (project: ProjectCreateData) => {
     if (!user) return { error: 'No user logged in' };
@@ -196,13 +270,29 @@ export const useProjectsWithCache = (limit?: number) => {
 
       // Clear cache for this user
       if (user) {
-        projectCache.remove(`projects_${user.id}_${limit || 'all'}`);
+        const cacheKey = getCacheKey();
+        if (cacheKey) {
+          projectCache.remove(cacheKey);
+        }
       }
 
       setProjects((prev) => [projectData as ProjectData, ...prev]);
+      
+      toast({
+        title: "Project created",
+        description: `${project.title} has been created successfully`,
+      });
+      
       return { data: projectData, error: null };
     } catch (err: any) {
       console.error('Error creating project:', err);
+      
+      toast({
+        title: "Failed to create project",
+        description: err.message || "Please try again",
+        variant: "destructive"
+      });
+      
       return { data: null, error: err.message };
     } finally {
       setLoading(false);
@@ -228,9 +318,13 @@ export const useProjectsWithCache = (limit?: number) => {
 
       // Clear cache for this user
       if (user) {
-        projectCache.remove(`projects_${user.id}_${limit || 'all'}`);
+        const cacheKey = getCacheKey();
+        if (cacheKey) {
+          projectCache.remove(cacheKey);
+        }
       }
 
+      // Update local state immediately
       setProjects(prev => 
         prev.map(p => p.id === projectId ? { ...p, ...updates } : p)
       );
@@ -238,6 +332,13 @@ export const useProjectsWithCache = (limit?: number) => {
       return { data, error: null };
     } catch (err: any) {
       console.error('Error updating project:', err);
+      
+      toast({
+        title: "Failed to update project",
+        description: err.message || "Please try again",
+        variant: "destructive"
+      });
+      
       return { data: null, error: err.message };
     } finally {
       setLoading(false);
@@ -261,18 +362,48 @@ export const useProjectsWithCache = (limit?: number) => {
 
       // Clear cache for this user
       if (user) {
-        projectCache.remove(`projects_${user.id}_${limit || 'all'}`);
+        const cacheKey = getCacheKey();
+        if (cacheKey) {
+          projectCache.remove(cacheKey);
+        }
       }
 
+      // Update local state immediately
       setProjects(prev => prev.filter(p => p.id !== projectId));
+      
+      toast({
+        title: "Project deleted",
+        description: "The project has been permanently deleted",
+      });
+      
       return { error: null };
     } catch (err: any) {
       console.error('Error deleting project:', err);
+      
+      toast({
+        title: "Failed to delete project",
+        description: err.message || "Please try again",
+        variant: "destructive"
+      });
+      
       return { error: err.message };
     } finally {
       setLoading(false);
     }
   };
 
-  return { projects, loading, error, createProject, updateProject, deleteProject };
+  // Force refresh function that can be called by components
+  const refreshProjects = () => {
+    fetchProjects(true); // Skip cache
+  };
+
+  return { 
+    projects, 
+    loading, 
+    error, 
+    createProject, 
+    updateProject, 
+    deleteProject,
+    refreshProjects
+  };
 };

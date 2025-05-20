@@ -19,24 +19,28 @@ export function useIsMobile() {
   return !!isMobile
 }
 
-// Add the useMediaQuery function that was likely intended to be used
 export function useMediaQuery(query: string) {
   const [matches, setMatches] = React.useState<boolean>(false)
 
   React.useEffect(() => {
-    const media = window.matchMedia(query)
-    const onChange = () => {
+    if (typeof window !== 'undefined') {
+      const media = window.matchMedia(query)
+      
+      const onChange = () => {
+        setMatches(media.matches)
+      }
+      
+      // Set initial value
       setMatches(media.matches)
+      
+      // Use the correct event listener method based on browser support
+      media.addEventListener("change", onChange)
+      
+      // Clean up
+      return () => media.removeEventListener("change", onChange)
     }
     
-    // Set initial value
-    setMatches(media.matches)
-    
-    // Listen for changes
-    media.addEventListener("change", onChange)
-    
-    // Clean up
-    return () => media.removeEventListener("change", onChange)
+    return undefined
   }, [query])
 
   return matches
