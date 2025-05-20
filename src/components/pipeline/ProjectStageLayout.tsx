@@ -9,6 +9,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import { ArrowLeft, ArrowRight, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import ErrorBoundary from "@/components/common/ErrorBoundary";
+import { Progress } from "@/components/ui/progress";
 
 interface ProjectStageLayoutProps {
   title: string;
@@ -18,6 +20,8 @@ interface ProjectStageLayoutProps {
   onPrevious?: () => void;
   isNextDisabled?: boolean;
   isLoading?: boolean;
+  loadingProgress?: number;
+  loadingMessage?: string;
 }
 
 const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
@@ -28,6 +32,8 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
   onPrevious,
   isNextDisabled = false,
   isLoading = false,
+  loadingProgress,
+  loadingMessage = "Processing...",
 }) => {
   const { projectId, stageId } = useParams<{ projectId: string; stageId: string }>();
   const { projects, loading: projectsLoading, updateProject } = useProjects();
@@ -88,11 +94,11 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
       
       // Navigate to the next stage
       navigate(`/projects/${projectId}/${nextStage.id}`);
-    } catch (error) {
+    } catch (error: any) {
       console.error("Error updating project status:", error);
       toast({
         title: "Error",
-        description: "Failed to update project status",
+        description: error.message || "Failed to update project status",
         variant: "destructive",
       });
     }
@@ -114,6 +120,14 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
     if (previousStage) {
       navigate(`/projects/${projectId}/${previousStage.id}`);
     }
+  };
+
+  const resetErrorBoundary = () => {
+    // This function could be used to reset state or refetch data
+    toast({
+      title: "Retrying",
+      description: "Attempting to recover from the error",
+    });
   };
 
   if (projectsLoading || !project) {
@@ -151,7 +165,15 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
             <CardDescription>{description}</CardDescription>
           </CardHeader>
           <CardContent>
-            {children}
+            <ErrorBoundary onReset={resetErrorBoundary}>
+              {isLoading && loadingProgress !== undefined ? (
+                <div className="my-4 space-y-2">
+                  <Progress value={loadingProgress} className="h-2" />
+                  <p className="text-sm text-center text-muted-foreground">{loadingMessage}</p>
+                </div>
+              ) : null}
+              {children}
+            </ErrorBoundary>
           </CardContent>
         </Card>
         
@@ -170,7 +192,7 @@ const ProjectStageLayout: React.FC<ProjectStageLayoutProps> = ({
             {isLoading ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
+                {loadingMessage || "Processing..."}
               </>
             ) : (
               <>
