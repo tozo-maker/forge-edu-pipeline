@@ -155,13 +155,20 @@ const OutlineContextStage: React.FC = () => {
   // The wrapper function that properly returns a Promise<boolean>
   const onNextWrapper = async (): Promise<boolean> => {
     try {
-      // Using handleSubmit method directly to avoid type errors
-      const formSubmit = form.handleSubmit(handleSubmit);
-      return await new Promise<boolean>((resolve) => {
-        formSubmit((success) => {
-          // The success value will be the return value from our handleSubmit function
-          resolve(!!success);
-        })();
+      return new Promise<boolean>((resolve) => {
+        // Call handleSubmit with a function that will be executed when form is valid
+        const onValid = async (data: z.infer<typeof outlineSchema>) => {
+          const result = await handleSubmit(data);
+          resolve(result);
+        };
+        
+        // Call with a function that will be executed when form is invalid
+        const onInvalid = () => {
+          resolve(false);
+        };
+        
+        // Execute the form validation and submission
+        form.handleSubmit(onValid, onInvalid)();
       });
     } catch (error) {
       console.error("Error in form submission:", error);
