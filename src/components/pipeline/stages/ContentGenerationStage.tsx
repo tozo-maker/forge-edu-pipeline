@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/com
 import { useToast } from "@/hooks/use-toast";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
-import { Loader2, Check, AlertCircle } from "lucide-react";
+import { Loader2, Check, AlertCircle, X, RotateCcw } from "lucide-react";
 import ErrorBoundary from "@/components/common/ErrorBoundary";
 import SectionsList from "@/components/pipeline/content-generation/SectionsList";
 import PromptView from "@/components/pipeline/content-generation/PromptView";
@@ -14,6 +14,15 @@ import ContentView from "@/components/pipeline/content-generation/ContentView";
 import NoContentView from "@/components/pipeline/content-generation/NoContentView";
 import GuidedTour, { AI_CONTENT_GENERATION_TOUR } from "@/components/common/GuidedTour";
 import { useMediaQuery } from "@/hooks/use-mobile";
+import { Button } from "@/components/ui/button";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge } from "@/components/ui/badge";
+import { Switch } from "@/components/ui/switch";
+import { Label } from "@/components/ui/label";
+import { RichTextEditor } from "@/components/pipeline/content-generation/RichTextEditor";
+import EducationalDNAPanel from "@/components/pipeline/content-generation/EducationalDNAPanel";
+import GenerationOptions from "@/components/pipeline/content-generation/GenerationOptions";
+import LiveQualityIndicators from "@/components/pipeline/content-generation/LiveQualityIndicators";
 
 const ContentGenerationStage: React.FC = () => {
   const { projectId } = useParams<{ projectId: string }>();
@@ -31,13 +40,31 @@ const ContentGenerationStage: React.FC = () => {
   const [showTour, setShowTour] = useState(false);
   const isMobile = useMediaQuery("md");
   const [generationInterval, setGenerationInterval] = useState<number | null>(null);
+  const [projectConfig, setProjectConfig] = useState<any>(null);
+  const [generationModel, setGenerationModel] = useState<string>("claude-3-opus-20240229");
+  const [generationStyle, setGenerationStyle] = useState<string>("balanced");
+  const [showLiveQuality, setShowLiveQuality] = useState(true);
+  const [isEditingEnabled, setIsEditingEnabled] = useState(false);
+  const [generationMessages, setGenerationMessages] = useState<string[]>([]);
+  const [socket, setSocket] = useState<WebSocket | null>(null);
+  const [generationCancelled, setGenerationCancelled] = useState(false);
 
   useEffect(() => {
     const fetchData = async () => {
       if (!projectId) return;
 
       try {
-        // First get the outline
+        // First get the project config for educational DNA
+        const { data: configData, error: configError } = await supabase
+          .from("project_configs")
+          .select("*")
+          .eq("project_id", projectId)
+          .single();
+          
+        if (configError) throw configError;
+        setProjectConfig(configData);
+        
+        // Get the outline
         const { data: outline, error: outlineError } = await supabase
           .from("outlines")
           .select("*")
@@ -131,8 +158,115 @@ const ContentGenerationStage: React.FC = () => {
       if (generationInterval) {
         clearInterval(generationInterval);
       }
+      
+      // Close WebSocket if open
+      if (socket && socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
     };
   }, [projectId, toast, generationInterval]);
+
+  // WebSocket setup for real-time updates
+  const setupWebSocket = (promptId: string) => {
+    // Close existing socket if it exists
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.close();
+    }
+    
+    try {
+      // Create a new WebSocket connection
+      const wsUrl = `${window.location.protocol === 'https:' ? 'wss:' : 'ws:'}//${window.location.host}/api/content-generation-stream`;
+      const newSocket = new WebSocket(wsUrl);
+      
+      newSocket.onopen = () => {
+        console.log('WebSocket connection established');
+        // Send initial message with prompt ID
+        newSocket.send(JSON.stringify({ 
+          promptId,
+          generationStyle,
+          model: generationModel
+        }));
+      };
+      
+      newSocket.onmessage = (event) => {
+        try {
+          const data = JSON.parse(event.data);
+          
+          if (data.type === 'progress') {
+            setGenerationProgress(data.progress);
+          } else if (data.type === 'content') {
+            // Update content in real time
+            setGenerationMessages(prev => [...prev, data.message]);
+            
+            // If it's the final message, update the content item
+            if (data.final) {
+              handleContentReceived(data.content, data.contentId);
+            }
+          } else if (data.type === 'quality') {
+            // Handle real-time quality assessment
+            updateQualityIndicators(data.indicators);
+          } else if (data.type === 'error') {
+            throw new Error(data.message);
+          }
+        } catch (error) {
+          console.error('Error processing WebSocket message:', error);
+        }
+      };
+      
+      newSocket.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        toast({
+          title: "Connection Error",
+          description: "Failed to establish real-time connection",
+          variant: "destructive",
+        });
+      };
+      
+      newSocket.onclose = () => {
+        console.log('WebSocket connection closed');
+      };
+      
+      setSocket(newSocket);
+    } catch (error) {
+      console.error('Error setting up WebSocket:', error);
+    }
+  };
+
+  const cancelGeneration = () => {
+    if (socket && socket.readyState === WebSocket.OPEN) {
+      socket.send(JSON.stringify({ type: 'cancel' }));
+      socket.close();
+      setSocket(null);
+    }
+    
+    if (generationInterval) {
+      clearInterval(generationInterval);
+      setGenerationInterval(null);
+    }
+    
+    setIsGenerating(false);
+    setGenerationCancelled(true);
+    setGenerationProgress(0);
+    
+    toast({
+      title: "Generation Cancelled",
+      description: "Content generation has been cancelled",
+    });
+  };
+
+  const updateQualityIndicators = (indicators: any) => {
+    // Handle updating quality indicators in the UI
+    const currentContent = getCurrentSectionContent();
+    if (!currentContent) return;
+    
+    setValidations(prev => ({
+      ...prev,
+      [currentContent.id]: {
+        ...prev[currentContent.id],
+        live_quality: indicators
+      }
+    }));
+  };
 
   const getCurrentSectionPrompt = () => {
     if (!sections.length || !prompts.length) return null;
@@ -148,6 +282,47 @@ const ContentGenerationStage: React.FC = () => {
     return contentItems.find((c) => c.prompt_id === currentPrompt.id);
   };
 
+  const handleContentReceived = (contentText: string, contentId: string) => {
+    // Update local state with the received content
+    const existingContentItems = [...contentItems];
+    const contentIndex = existingContentItems.findIndex(item => item.id === contentId);
+    
+    if (contentIndex >= 0) {
+      existingContentItems[contentIndex] = {
+        ...existingContentItems[contentIndex],
+        content_text: contentText,
+        is_approved: false
+      };
+    } else {
+      // This is a new content item
+      const currentPrompt = getCurrentSectionPrompt();
+      if (currentPrompt) {
+        existingContentItems.push({
+          id: contentId,
+          prompt_id: currentPrompt.id,
+          content_text: contentText,
+          is_approved: false,
+          metadata: {
+            model: generationModel,
+            style: generationStyle,
+            generated_at: new Date().toISOString()
+          }
+        });
+      }
+    }
+    
+    setContentItems(existingContentItems);
+    setActiveTab("content");
+    setIsGenerating(false);
+    setGenerationProgress(100);
+    
+    // Clear the generation messages
+    setTimeout(() => {
+      setGenerationMessages([]);
+      setGenerationProgress(0);
+    }, 1000);
+  };
+
   const generateContent = async () => {
     const currentPrompt = getCurrentSectionPrompt();
     if (isGenerating || !currentPrompt || !projectId) return;
@@ -155,12 +330,17 @@ const ContentGenerationStage: React.FC = () => {
     try {
       setIsGenerating(true);
       setGenerationProgress(0);
+      setGenerationCancelled(false);
+      setGenerationMessages([]);
       
-      // Start progress animation
+      // Setup WebSocket for real-time updates
+      setupWebSocket(currentPrompt.id);
+      
+      // Fallback for progress animation if WebSocket fails
       const interval = window.setInterval(() => {
         setGenerationProgress((prev) => {
-          const newProgress = prev + Math.random() * 5;
-          return newProgress > 95 ? 95 : newProgress;
+          if (prev >= 95) return 95;
+          return prev + Math.random() * 3;
         });
       }, 800);
       
@@ -172,16 +352,23 @@ const ContentGenerationStage: React.FC = () => {
         description: `Creating content for "${sections[currentSectionIndex].title}" with Claude AI`,
       });
       
-      // Call the edge function to generate content
+      // Call the edge function as a backup if WebSockets fail
       const { data: response, error } = await supabase.functions.invoke("generate-educational-content", {
         body: {
           promptId: currentPrompt.id,
+          parameters: {
+            model: generationModel,
+            style: generationStyle,
+            max_tokens: 4000,
+            temperature: generationStyle === "creative" ? 0.9 : 
+                         generationStyle === "conservative" ? 0.3 : 0.7
+          }
         },
       });
       
-      // Clear interval and set progress to 100%
+      // Clear interval and set progress to 100% if WebSocket didn't complete
       clearInterval(interval);
-      setGenerationProgress(100);
+      setGenerationInterval(null);
       
       if (error) throw error;
       
@@ -189,39 +376,40 @@ const ContentGenerationStage: React.FC = () => {
         throw new Error(response.error || "Failed to generate content");
       }
       
-      // Check if content already exists
-      const existingContent = contentItems.find((c) => c.prompt_id === currentPrompt.id);
-      
-      if (existingContent) {
-        // Update local state
-        setContentItems((prev) =>
-          prev.map((c) =>
-            c.id === existingContent.id ? { ...c, content_text: response.content, is_approved: false } : c
-          )
-        );
-      } else if (response.contentId) {
-        // Fetch the newly created content
-        const { data: newContent, error: fetchError } = await supabase
-          .from("content_items")
-          .select("*")
-          .eq("id", response.contentId)
-          .single();
-          
-        if (fetchError) throw fetchError;
+      // If WebSocket failed to update content, update it here
+      if (!generationCancelled) {
+        // Check if content already exists
+        const existingContent = contentItems.find((c) => c.prompt_id === currentPrompt.id);
         
-        // Update local state
-        setContentItems((prev) => [...prev, newContent]);
-      } else {
-        throw new Error("Failed to retrieve content ID");
+        if (existingContent) {
+          // Update local state
+          setContentItems((prev) =>
+            prev.map((c) =>
+              c.id === existingContent.id ? { ...c, content_text: response.content, is_approved: false } : c
+            )
+          );
+        } else if (response.contentId) {
+          // Fetch the newly created content
+          const { data: newContent, error: fetchError } = await supabase
+            .from("content_items")
+            .select("*")
+            .eq("id", response.contentId)
+            .single();
+              
+          if (fetchError) throw fetchError;
+            
+          // Update local state
+          setContentItems((prev) => [...prev, newContent]);
+        }
+        
+        // Switch tab to view content
+        setActiveTab("content");
+        
+        toast({
+          title: "Content Generated",
+          description: "AI content has been successfully created with Claude",
+        });
       }
-      
-      // Switch tab to view content
-      setActiveTab("content");
-      
-      toast({
-        title: "Content Generated",
-        description: "AI content has been successfully created with Claude",
-      });
     } catch (error) {
       console.error("Error generating content:", error);
       toast({
@@ -232,9 +420,9 @@ const ContentGenerationStage: React.FC = () => {
     } finally {
       if (generationInterval) {
         clearInterval(generationInterval);
+        setGenerationInterval(null);
       }
       setIsGenerating(false);
-      setGenerationInterval(null);
     }
   };
 
@@ -261,7 +449,7 @@ const ContentGenerationStage: React.FC = () => {
       // Update local state with validation results
       setValidations((prev) => ({ ...prev, [currentContent.id]: { 
         ...response.validation,
-        id: response.contentId
+        id: response.validationId
       }}));
       
       toast({
@@ -447,22 +635,68 @@ const ContentGenerationStage: React.FC = () => {
               onSectionSelect={switchSection}
               getContentProgress={getContentProgress}
             />
+            
+            {/* Educational DNA Panel */}
+            {projectConfig && (
+              <EducationalDNAPanel 
+                projectConfig={projectConfig} 
+                className="mt-4 hidden md:block"
+              />
+            )}
           </ErrorBoundary>
         </div>
         
         {/* Content area */}
         <div className="md:col-span-3 space-y-4">
           <ErrorBoundary aiContext>
-            <Card>
+            {/* Generation Options */}
+            <Card className="mb-4">
               <CardHeader className="pb-2">
-                <CardTitle>
-                  {sections[currentSectionIndex]?.title || "Section Content"}
-                </CardTitle>
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2">
+                  <CardTitle>
+                    {sections[currentSectionIndex]?.title || "Section Content"}
+                  </CardTitle>
+                  
+                  <div className="flex items-center gap-2">
+                    <div className="flex items-center space-x-2">
+                      <Switch 
+                        id="live-quality"
+                        checked={showLiveQuality}
+                        onCheckedChange={setShowLiveQuality}
+                      />
+                      <Label htmlFor="live-quality" className="text-xs text-muted-foreground">
+                        Live Quality
+                      </Label>
+                    </div>
+                    
+                    <div className="flex items-center space-x-2">
+                      <Switch 
+                        id="rich-editor"
+                        checked={isEditingEnabled}
+                        onCheckedChange={setIsEditingEnabled}
+                      />
+                      <Label htmlFor="rich-editor" className="text-xs text-muted-foreground">
+                        Rich Editor
+                      </Label>
+                    </div>
+                  </div>
+                </div>
                 <CardDescription>
                   {sections[currentSectionIndex]?.description || "Generate content for this section"}
                 </CardDescription>
               </CardHeader>
               <CardContent>
+                <GenerationOptions 
+                  model={generationModel}
+                  onModelChange={setGenerationModel}
+                  style={generationStyle}
+                  onStyleChange={setGenerationStyle}
+                />
+              </CardContent>
+            </Card>
+            
+            <Card>
+              <CardHeader className="pb-2">
                 <Tabs value={activeTab} onValueChange={setActiveTab} className="space-y-4">
                   <TabsList className={isMobile ? "w-full grid-cols-2" : "grid grid-cols-2"}>
                     <TabsTrigger value="prompt" className={isMobile ? "text-xs py-1 px-2" : ""}>
@@ -478,27 +712,71 @@ const ContentGenerationStage: React.FC = () => {
                       )}
                     </TabsTrigger>
                   </TabsList>
-                  
+                </Tabs>
+              </CardHeader>
+              <CardContent>
+                <Tabs value={activeTab} className="space-y-4">
                   <TabsContent value="prompt">
                     <PromptView
                       prompt={currentPrompt}
                       isGenerating={isGenerating}
                       generationProgress={generationProgress}
                       onGenerate={generateContent}
+                      onCancel={cancelGeneration}
                     />
+                    
+                    {/* Real-time generation messages */}
+                    {isGenerating && generationMessages.length > 0 && (
+                      <div className="mt-4 border rounded-md p-4 bg-gray-50 overflow-y-auto max-h-[300px]">
+                        <h4 className="text-sm font-medium mb-2">Generation Progress</h4>
+                        <div className="space-y-2">
+                          {generationMessages.map((message, index) => (
+                            <div 
+                              key={index}
+                              className="text-sm text-gray-600 animate-fade-in"
+                            >
+                              {message}
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                   </TabsContent>
                   
                   <TabsContent value="content">
                     {currentContent ? (
-                      <ContentView 
-                        content={currentContent}
-                        onUpdateContent={updateContent}
-                        onRegenerateContent={generateContent}
-                        onToggleApproval={toggleContentApproval}
-                        onValidateContent={validateContent}
-                        validation={currentValidation?.validation_data}
-                        isValidating={isValidating}
-                      />
+                      <>
+                        {showLiveQuality && currentValidation?.live_quality && (
+                          <div className="mb-4">
+                            <LiveQualityIndicators 
+                              indicators={currentValidation.live_quality}
+                            />
+                          </div>
+                        )}
+                      
+                        {isEditingEnabled ? (
+                          <RichTextEditor
+                            content={currentContent.content_text}
+                            onUpdate={updateContent}
+                            onRegenerateContent={generateContent}
+                            onToggleApproval={toggleContentApproval}
+                            onValidateContent={validateContent}
+                            validation={currentValidation?.validation_data}
+                            isValidating={isValidating}
+                            isApproved={currentContent.is_approved}
+                          />
+                        ) : (
+                          <ContentView 
+                            content={currentContent}
+                            onUpdateContent={updateContent}
+                            onRegenerateContent={generateContent}
+                            onToggleApproval={toggleContentApproval}
+                            onValidateContent={validateContent}
+                            validation={currentValidation?.validation_data}
+                            isValidating={isValidating}
+                          />
+                        )}
+                      </>
                     ) : (
                       <NoContentView onGoToPrompt={() => setActiveTab("prompt")} />
                     )}

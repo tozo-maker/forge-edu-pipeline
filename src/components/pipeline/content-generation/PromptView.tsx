@@ -1,80 +1,70 @@
 
 import React from 'react';
-import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Progress } from '@/components/ui/progress';
-import { RefreshCw, Loader2, Play } from 'lucide-react';
+import { Loader2, Play, X } from 'lucide-react';
 
 interface PromptViewProps {
   prompt: any;
   isGenerating: boolean;
   generationProgress: number;
   onGenerate: () => void;
+  onCancel?: () => void;
 }
 
 const PromptView: React.FC<PromptViewProps> = ({
   prompt,
   isGenerating,
   generationProgress,
-  onGenerate
+  onGenerate,
+  onCancel
 }) => {
+  if (!prompt) {
+    return (
+      <div className="text-center py-8 text-gray-400">
+        <p>No prompt available for this section.</p>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <div className="bg-gray-50 border rounded-md p-4 text-sm">
-        <div className="flex items-center justify-between mb-2">
-          <span className="font-medium">AI Prompt</span>
-          {prompt?.is_approved ? (
-            <Badge variant="outline" className="bg-green-50 text-green-700">
-              Approved
-            </Badge>
-          ) : (
-            <Badge variant="outline" className="bg-amber-50 text-amber-700">
-              Not Approved
-            </Badge>
-          )}
-        </div>
-        <pre className="whitespace-pre-wrap font-mono text-xs">
-          {prompt?.prompt_text || "No prompt available for this section"}
-        </pre>
+      <div className="bg-gray-50 rounded-md p-4 font-mono text-sm whitespace-pre-wrap">
+        {prompt.prompt_text}
       </div>
       
-      <div className="flex justify-between">
-        <Button
-          variant="outline"
-          size="sm"
-          disabled={!prompt?.is_approved}
-          onClick={onGenerate}
-        >
-          <RefreshCw className="h-4 w-4 mr-2" />
-          Regenerate
-        </Button>
-        <Button 
-          size="sm" 
-          disabled={!prompt?.is_approved || isGenerating}
-          onClick={onGenerate} 
-          className="gap-2"
-        >
-          {isGenerating ? (
-            <>
-              <Loader2 className="h-4 w-4 animate-spin" />
-              Generating...
-            </>
-          ) : (
-            <>
-              <Play className="h-4 w-4" />
-              Generate Content
-            </>
-          )}
-        </Button>
-      </div>
-      
-      {isGenerating && (
-        <div className="space-y-2">
-          <div className="flex justify-between text-xs text-gray-500">
-            <span>Generation Progress</span>
-            <span>{Math.round(generationProgress)}%</span>
-          </div>
+      {isGenerating ? (
+        <div className="space-y-3">
           <Progress value={generationProgress} className="h-2" />
+          <div className="flex items-center justify-between">
+            <div className="text-sm text-gray-500 flex items-center">
+              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+              Generating with Claude AI...
+            </div>
+            
+            {onCancel && (
+              <Button 
+                variant="outline" 
+                size="sm" 
+                onClick={onCancel}
+                className="flex items-center gap-1"
+              >
+                <X className="h-4 w-4" />
+                <span>Cancel</span>
+              </Button>
+            )}
+          </div>
+        </div>
+      ) : (
+        <div className="flex justify-center">
+          <Button 
+            onClick={onGenerate} 
+            size="lg"
+            className="gap-2"
+          >
+            <Play className="h-4 w-4" />
+            Generate Content with Claude AI
+          </Button>
         </div>
       )}
     </div>
