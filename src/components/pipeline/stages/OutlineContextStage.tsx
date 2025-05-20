@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -151,10 +152,21 @@ const OutlineContextStage: React.FC = () => {
     }
   };
 
-  // We need to fix this function to properly return a Promise<boolean>
+  // The wrapper function that properly returns a Promise<boolean>
   const onNextWrapper = async (): Promise<boolean> => {
-    // This ensures the function returns a Promise<boolean> as required
-    return form.handleSubmit(handleSubmit)();
+    try {
+      // Using handleSubmit method directly to avoid type errors
+      const formSubmit = form.handleSubmit(handleSubmit);
+      return await new Promise<boolean>((resolve) => {
+        formSubmit((success) => {
+          // The success value will be the return value from our handleSubmit function
+          resolve(!!success);
+        })();
+      });
+    } catch (error) {
+      console.error("Error in form submission:", error);
+      return false;
+    }
   };
 
   return (
