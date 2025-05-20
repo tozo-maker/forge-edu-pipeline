@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from "react";
 import { useParams } from "react-router-dom";
 import { useForm } from "react-hook-form";
@@ -152,11 +151,17 @@ const OutlineContextStage: React.FC = () => {
     }
   };
 
+  // We need to fix this function to properly return a Promise<boolean>
+  const onNextWrapper = async (): Promise<boolean> => {
+    // This ensures the function returns a Promise<boolean> as required
+    return form.handleSubmit(handleSubmit)();
+  };
+
   return (
     <ProjectStageLayout
       title="Outline Context"
       description="Define the structure and flow of your educational content"
-      onNext={form.handleSubmit(handleSubmit)}
+      onNext={onNextWrapper}
       isLoading={isSubmitting}
     >
       <Form {...form}>
