@@ -5,6 +5,8 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Sparkles, Loader2 } from "lucide-react";
 import { useWizard } from "@/contexts/WizardContext";
 import { toast } from "sonner";
+import { ProjectWizardFormData } from "@/types/project";
+import { Objective } from "@/components/project/steps/learning-objectives/types";
 
 type RecommendationType = 
   | "objectives" 
@@ -123,9 +125,9 @@ const AIAssistant: React.FC<AIAssistantProps> = ({
 // Helper functions to generate educational content
 // In a real implementation, these would be API calls to an AI service
 
-function generateObjectives(subject: string, gradeLevel: string) {
+function generateObjectives(subject: string, gradeLevel: string): Objective[] {
   // Sample objectives based on subject and grade level
-  const objectives = [
+  const objectives: Objective[] = [
     {
       text: `Identify key concepts in ${subject} appropriate for ${gradeLevel} level students`,
       bloomsLevel: "understand"
@@ -143,7 +145,7 @@ function generateObjectives(subject: string, gradeLevel: string) {
   return objectives;
 }
 
-function generateMethodology(projectType: string) {
+function generateMethodology(projectType: string): string[] {
   // Sample methodologies based on project type
   if (projectType === "lesson_plan") {
     return ["Inquiry-based learning", "Direct instruction", "Cooperative learning"];
@@ -154,7 +156,7 @@ function generateMethodology(projectType: string) {
   }
 }
 
-function generateCompleteProfile(partialData: any) {
+function generateCompleteProfile(partialData: Partial<ProjectWizardFormData>): Partial<ProjectWizardFormData> {
   const subject = partialData.subjectArea?.[0] || "";
   const grade = partialData.gradeLevel?.[0] || "";
   const projectType = partialData.projectType || "lesson_plan";
@@ -166,7 +168,7 @@ function generateCompleteProfile(partialData: any) {
     differentiationStrategies: ["Visual learning supports", "Tiered assignments", "Flexible grouping"],
     culturalInclusion: ["Diverse examples and perspectives", "Culturally responsive content"],
     accessibilityNeeds: ["Screen reader compatible", "Multiple representation of information"],
-    organizationPattern: "sequential",
+    organizationPattern: "sequential" as "sequential" | "hierarchical" | "modular",
     contentSections: [
       { title: "Introduction", description: "Opening engagement activity", sequence: 1 },
       { title: "Core Content", description: "Main concepts and skills", sequence: 2 },

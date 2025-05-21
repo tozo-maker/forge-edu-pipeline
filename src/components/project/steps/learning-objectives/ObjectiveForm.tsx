@@ -11,17 +11,18 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Plus } from "lucide-react";
+import { Objective, BLOOMS_LEVELS } from "./types";
 
 interface ObjectiveFormProps {
   newObjectiveText: string;
   setNewObjectiveText: (text: string) => void;
-  newObjectiveBloom: string;
-  setNewObjectiveBloom: (level: string) => void;
+  newObjectiveBloom: 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create';
+  setNewObjectiveBloom: React.Dispatch<React.SetStateAction<'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create'>>;
   addObjective: () => void;
 }
 
 // Common learning objectives by Bloom's level
-const COMMON_OBJECTIVES = {
+const COMMON_OBJECTIVES: Record<string, string[]> = {
   remember: [
     "Recall key facts about...",
     "Define the term...",
@@ -71,6 +72,11 @@ const ObjectiveForm: React.FC<ObjectiveFormProps> = ({
     setNewObjectiveText(suggestion);
   };
   
+  const handleBloomChange = (value: string) => {
+    // Assert the type to ensure it's one of the valid bloom levels
+    setNewObjectiveBloom(value as 'remember' | 'understand' | 'apply' | 'analyze' | 'evaluate' | 'create');
+  };
+  
   return (
     <div className="space-y-4 border rounded-lg p-4 bg-gray-50">
       <div className="flex gap-4 items-start">
@@ -93,7 +99,7 @@ const ObjectiveForm: React.FC<ObjectiveFormProps> = ({
             <FormLabel>Bloom's Level</FormLabel>
             <Select
               value={newObjectiveBloom}
-              onValueChange={setNewObjectiveBloom}
+              onValueChange={handleBloomChange}
             >
               <SelectTrigger>
                 <SelectValue placeholder="Select level" />
@@ -115,7 +121,7 @@ const ObjectiveForm: React.FC<ObjectiveFormProps> = ({
         <div>
           <FormLabel>Common Objectives (Click to use)</FormLabel>
           <div className="grid grid-cols-1 md:grid-cols-2 gap-2 mt-1">
-            {COMMON_OBJECTIVES[newObjectiveBloom as keyof typeof COMMON_OBJECTIVES]?.map((suggestion, index) => (
+            {COMMON_OBJECTIVES[newObjectiveBloom]?.map((suggestion, index) => (
               <div 
                 key={index}
                 onClick={() => handleSuggestionClick(suggestion)}
