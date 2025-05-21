@@ -1,138 +1,156 @@
 
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.21.0";
 
+// Setup CORS headers for WebSockets
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
 };
 
+// Create a WebSocket server to handle connections
 serve(async (req) => {
-  // Handle CORS preflight requests
+  // Handle CORS preflight requests for WebSockets
   if (req.method === 'OPTIONS') {
     return new Response(null, { headers: corsHeaders });
   }
-  
-  // Check if this is a WebSocket request
-  const upgradeHeader = req.headers.get('Upgrade');
-  if (!upgradeHeader || upgradeHeader.toLowerCase() !== 'websocket') {
-    return new Response('Expected WebSocket connection', { 
-      status: 400,
-      headers: corsHeaders
-    });
-  }
 
   try {
-    // Create Supabase client (for admin operations)
-    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
-    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    // Check if it's a WebSocket connection request
+    const { headers } = req;
+    const upgradeHeader = headers.get("upgrade") || "";
     
-    // Get Anthropic API key from environment
-    const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
-    
-    if (!anthropicApiKey) {
-      return new Response('Anthropic API key not configured', { 
-        status: 500,
+    if (upgradeHeader.toLowerCase() !== "websocket") {
+      return new Response("Expected WebSocket connection", { 
+        status: 400,
         headers: corsHeaders
       });
     }
 
-    // Upgrade the WebSocket connection
+    // Create Supabase client
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const supabaseAnonKey = Deno.env.get('SUPABASE_ANON_KEY') ?? '';
+    const supabaseServiceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    const adminClient = createClient(supabaseUrl, supabaseServiceKey);
+
+    // Get Anthropic API key from environment
+    const anthropicApiKey = Deno.env.get('ANTHROPIC_API_KEY');
+    
+    if (!anthropicApiKey) {
+      return new Response(JSON.stringify({ error: "Anthropic API key not configured" }), {
+        status: 500,
+        headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+      });
+    }
+
+    // Upgrade the connection to WebSocket
     const { socket, response } = Deno.upgradeWebSocket(req);
     
-    // Initialize state
-    let promptId: string | null = null;
-    let model: string = "claude-3-opus-20240229";
-    let generationStyle: string = "balanced";
-    let contentId: string | null = null;
-    let isCancelled = false;
-    let content = "";
+    // Handle connection open
+    socket.onopen = () => {
+      console.log("WebSocket connection established");
+    };
+    
+    // Handle connection close
+    socket.onclose = () => {
+      console.log("WebSocket connection closed");
+    };
+    
+    // Handle errors
+    socket.onerror = (error) => {
+      console.error("WebSocket error:", error);
+    };
 
-    // Handle messages from the client
+    // Handle messages from client
     socket.onmessage = async (event) => {
       try {
         const message = JSON.parse(event.data);
+        
+        // Handle cancel request
+        if (message.type === 'cancel') {
+          socket.send(JSON.stringify({ 
+            type: 'info', 
+            message: 'Generation cancelled' 
+          }));
+          return;
+        }
+        
+        // Get prompt ID from message
+        const promptId = message.promptId;
+        if (!promptId) {
+          socket.send(JSON.stringify({ 
+            type: 'error', 
+            message: 'No promptId provided' 
+          }));
+          return;
+        }
+        
+        // Get model and style preferences
+        const model = message.model || "claude-3-opus-20240229";
+        const style = message.style || "balanced";
+        
+        // Send initial progress update
+        socket.send(JSON.stringify({ 
+          type: 'progress', 
+          progress: 5,
+          message: 'Starting content generation...' 
+        }));
+        
+        // Fetch the prompt from the database
+        const { data: promptData, error: promptError } = await adminClient
+          .from('prompts')
+          .select('*, sections!inner(*)')
+          .eq('id', promptId)
+          .single();
 
-        // Handle initialization message
-        if (message.promptId) {
-          promptId = message.promptId;
-          model = message.model || model;
-          generationStyle = message.generationStyle || generationStyle;
-          
-          // Start the generation process
-          socket.send(JSON.stringify({
-            type: 'progress',
-            progress: 5,
-            message: 'Starting generation...'
+        if (promptError) {
+          socket.send(JSON.stringify({ 
+            type: 'error', 
+            message: `Error fetching prompt: ${promptError.message}` 
           }));
+          return;
+        }
+
+        // Get project configuration for educational DNA
+        let projectConfig = null;
+        if (promptData.sections) {
+          const outlineId = promptData.sections.outline_id;
           
-          // Create Supabase client using ESM.sh (works in Deno edge functions)
-          const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2.21.0");
-          const supabase = createClient(supabaseUrl, supabaseServiceKey);
-          
-          // Fetch the prompt data
-          socket.send(JSON.stringify({
-            type: 'progress',
-            progress: 10,
-            message: 'Fetching prompt data...'
-          }));
-          
-          const { data: promptData, error: promptError } = await supabase
-            .from('prompts')
-            .select('*, sections!inner(*)')
-            .eq('id', promptId)
+          const { data: outlineData } = await adminClient
+            .from('outlines')
+            .select('project_id')
+            .eq('id', outlineId)
             .single();
             
-          if (promptError || !promptData) {
-            socket.send(JSON.stringify({
-              type: 'error',
-              message: promptError?.message || 'Prompt not found'
-            }));
-            socket.close();
-            return;
-          }
-          
-          // Get project configuration
-          socket.send(JSON.stringify({
-            type: 'progress',
-            progress: 15,
-            message: 'Retrieving educational DNA...'
-          }));
-          
-          let projectConfig = null;
-          if (promptData.sections && promptData.sections.outline_id) {
-            const { data: outlineData } = await supabase
-              .from('outlines')
-              .select('project_id')
-              .eq('id', promptData.sections.outline_id)
+          if (outlineData) {
+            const projectId = outlineData.project_id;
+            
+            const { data: configData } = await adminClient
+              .from('project_configs')
+              .select('*')
+              .eq('project_id', projectId)
               .single();
               
-            if (outlineData) {
-              const { data: configData } = await supabase
-                .from('project_configs')
-                .select('*')
-                .eq('project_id', outlineData.project_id)
-                .single();
-                
-              if (configData) {
-                projectConfig = configData;
-              }
+            if (configData) {
+              projectConfig = configData;
+              
+              // Update progress
+              socket.send(JSON.stringify({ 
+                type: 'progress', 
+                progress: 15,
+                message: 'Educational DNA loaded...' 
+              }));
             }
           }
+        }
+        
+        // Enhance prompt with educational context if available
+        let finalPrompt = promptData.prompt_text;
+        if (projectConfig) {
+          const { educationalContext, pedagogicalApproach, culturalAccessibility } = projectConfig.config_data;
           
-          // Prepare the prompt
-          let finalPrompt = promptData.prompt_text;
-          
-          // Enhance prompt with educational context if available
-          if (projectConfig) {
-            const { educationalContext, pedagogicalApproach, culturalAccessibility } = projectConfig;
-            
-            socket.send(JSON.stringify({
-              type: 'message',
-              message: 'Incorporating educational DNA into prompt...'
-            }));
-            
-            // Add educational DNA as system context
-            finalPrompt = `
+          // Add educational DNA as context
+          finalPrompt = `
 Educational Context:
 - Grade Level: ${educationalContext?.gradeLevel?.join(', ') || 'Not specified'}
 - Subject Area: ${educationalContext?.subjectArea?.join(', ') || 'Not specified'}
@@ -147,323 +165,264 @@ Accessibility Requirements:
 - Cultural Inclusion: ${culturalAccessibility?.culturalInclusion?.join(', ') || 'Not specified'}
 - Accessibility Needs: ${culturalAccessibility?.accessibilityNeeds?.join(', ') || 'Not specified'}
 
-${finalPrompt}`;
-          }
-
-          // Apply generation style
+${promptData.prompt_text}`;
+        }
+        
+        // Apply generation style
+        if (style) {
           const styleIntro = 
-            generationStyle === "creative" ? 
+            style === "creative" ? 
               "Generate creative, engaging, and imaginative educational content. Feel free to use analogies, stories, and thought-provoking examples." :
-            generationStyle === "conservative" ?
+            style === "conservative" ?
               "Generate clear, concise, and straightforward educational content. Focus on accuracy, clarity, and alignment with educational standards." :
               "Generate well-balanced educational content that combines clarity with engagement. Use a mix of straightforward explanations and illustrative examples.";
               
           finalPrompt = `${styleIntro}\n\n${finalPrompt}`;
-          
-          // Adjust temperature based on style
-          const temperature = 
-            generationStyle === "creative" ? 0.9 :
-            generationStyle === "conservative" ? 0.3 : 0.7;
-          
-          // Call the Anthropic Claude API for streaming
-          socket.send(JSON.stringify({
-            type: 'progress',
-            progress: 20,
-            message: `Starting generation with ${model}...`
-          }));
-          
-          // Check if content already exists for this prompt
-          const { data: existingContent } = await supabase
-            .from('content_items')
-            .select('id')
-            .eq('prompt_id', promptId)
-            .maybeSingle();
-          
-          // Create or update content item
-          const contentOp = existingContent ? supabase
-            .from('content_items')
-            .update({
-              updated_at: new Date().toISOString(),
-              is_approved: false,
-              metadata: {
-                model: model,
-                style: generationStyle,
-                temperature: temperature,
-                generated_at: new Date().toISOString()
-              }
-            })
-            .eq('id', existingContent.id)
-            .select() : supabase
-            .from('content_items')
-            .insert({
-              prompt_id: promptId,
-              content_text: '', // Will be updated with final content
-              is_approved: false,
-              metadata: {
-                model: model,
-                style: generationStyle,
-                temperature: temperature,
-                generated_at: new Date().toISOString()
-              }
-            })
-            .select();
-            
-          const { data: contentData, error: contentError } = await contentOp;
-          
-          if (contentError || !contentData || contentData.length === 0) {
-            socket.send(JSON.stringify({
-              type: 'error',
-              message: contentError?.message || 'Failed to create content item'
-            }));
-            return;
-          }
-          
-          contentId = contentData[0].id;
-          
-          // Use the Anthropic API for a streaming response
-          try {
-            const response = await fetch('https://api.anthropic.com/v1/messages', {
-              method: 'POST',
-              headers: {
-                'Content-Type': 'application/json',
-                'x-api-key': anthropicApiKey,
-                'anthropic-version': '2023-06-01'
-              },
-              body: JSON.stringify({
-                model: model,
-                max_tokens: 4000,
-                temperature: temperature,
-                messages: [
-                  {
-                    role: "user", 
-                    content: finalPrompt
-                  }
-                ],
-                stream: false // Switch to true for real streaming once implemented
-              })
-            });
-            
-            if (!response.ok) {
-              const errorData = await response.json();
-              socket.send(JSON.stringify({
-                type: 'error',
-                message: `Claude API error: ${response.status} ${JSON.stringify(errorData)}`
-              }));
-              return;
-            }
-            
-            const data = await response.json();
-            content = data.content && data.content.length > 0 ? data.content[0].text : null;
-            
-            if (!content) {
-              socket.send(JSON.stringify({
-                type: 'error',
-                message: 'Empty content returned from Claude API'
-              }));
-              return;
-            }
-            
-            // Simulate streaming by sending content in chunks
-            const paragraphs = content.split('\n\n');
-            let progress = 25;
-            const progressIncrement = (70 / paragraphs.length);
-            
-            for (let i = 0; i < paragraphs.length; i++) {
-              if (isCancelled) break;
-              
-              // Update progress
-              progress += progressIncrement;
-              socket.send(JSON.stringify({
-                type: 'progress',
-                progress: Math.min(95, progress)
-              }));
-              
-              // Send paragraph
-              socket.send(JSON.stringify({
-                type: 'content',
-                message: `Generating paragraph ${i+1} of ${paragraphs.length}...`,
-                content: paragraphs.slice(0, i+1).join('\n\n')
-              }));
-              
-              // Simulate realistic typing speed
-              await new Promise(resolve => setTimeout(resolve, 200 + Math.random() * 800));
-              
-              // Periodically generate quality metrics for live feedback
-              if (i % 3 === 0 || i === paragraphs.length - 1) {
-                const currentContent = paragraphs.slice(0, i+1).join('\n\n');
-                
-                // Generate basic quality metrics (simplified version for real-time)
-                const qualityMetrics = {
-                  standards_alignment: 7 + Math.random() * 2,
-                  reading_level: {
-                    score: 7 + Math.random() * 2,
-                    level: "Grade " + Math.floor(6 + Math.random() * 6)
-                  },
-                  pedagogical_alignment: 7 + Math.random() * 2,
-                  accessibility: 6 + Math.random() * 3,
-                  cultural_sensitivity: 7 + Math.random() * 2
-                };
-                
-                socket.send(JSON.stringify({
-                  type: 'quality',
-                  indicators: qualityMetrics
-                }));
-              }
-            }
-            
-            // Final update
-            if (!isCancelled) {
-              // Update the database with the full content
-              await supabase
-                .from('content_items')
-                .update({
-                  content_text: content,
-                  updated_at: new Date().toISOString()
-                })
-                .eq('id', contentId);
-                
-              socket.send(JSON.stringify({
-                type: 'progress',
-                progress: 100
-              }));
-              
-              socket.send(JSON.stringify({
-                type: 'content',
-                message: 'Content generation complete!',
-                content: content,
-                contentId: contentId,
-                final: true
-              }));
-              
-              // Run final quality check
-              try {
-                const qualityPrompt = `
-You are an educational content quality assessor. Analyze the following educational content and provide quality metrics:
+        }
+        
+        // Update progress
+        socket.send(JSON.stringify({ 
+          type: 'progress', 
+          progress: 20,
+          message: 'Prompt prepared, connecting to Claude AI...' 
+        }));
 
-${content}
+        // Create a new content item in the database
+        const { data: contentData, error: contentError } = await adminClient
+          .from('content_items')
+          .insert({
+            prompt_id: promptId,
+            content_text: "",
+            is_approved: false,
+            metadata: {
+              model,
+              style: style || 'balanced',
+              temperature: style === "creative" ? 0.9 : style === "conservative" ? 0.3 : 0.7,
+              generated_at: new Date().toISOString()
+            }
+          })
+          .select()
+          .single();
+          
+        if (contentError) {
+          socket.send(JSON.stringify({ 
+            type: 'error', 
+            message: `Error creating content item: ${contentError.message}` 
+          }));
+          return;
+        }
+        
+        const contentId = contentData.id;
+        
+        // Update progress
+        socket.send(JSON.stringify({ 
+          type: 'progress', 
+          progress: 30,
+          message: 'Content entry created, generating with Claude AI...' 
+        }));
+        
+        // Call Anthropic Claude API with streaming enabled
+        try {
+          const response = await fetch('https://api.anthropic.com/v1/messages', {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+              'x-api-key': anthropicApiKey,
+              'anthropic-version': '2023-06-01'
+            },
+            body: JSON.stringify({
+              model,
+              max_tokens: 4000,
+              temperature: style === "creative" ? 0.9 : style === "conservative" ? 0.3 : 0.7,
+              stream: true,
+              messages: [
+                {
+                  role: "user",
+                  content: finalPrompt
+                }
+              ]
+            })
+          });
+
+          if (!response.ok) {
+            const errorData = await response.body?.getReader().read();
+            const decoder = new TextDecoder();
+            const errorText = decoder.decode(errorData?.value);
+            throw new Error(`Claude API error: ${response.status} ${errorText}`);
+          }
+
+          // Process the stream
+          const reader = response.body?.getReader();
+          const decoder = new TextDecoder();
+          let contentText = "";
+          let progress = 30;
+          let isQualityCheck = false;
+          let progressIncrement = 60 / (4000 / 50); // Rough estimate of progress per token chunk
+          
+          // Count for quality checks (every N updates)
+          let updateCount = 0;
+          const qualityCheckFrequency = 10;
+
+          while (true) {
+            const { done, value } = await reader.read();
+            
+            if (done) break;
+            
+            const chunk = decoder.decode(value);
+            const lines = chunk.split('\n').filter(line => line.trim() !== '');
+            
+            for (const line of lines) {
+              if (line.startsWith('data: ')) {
+                const data = line.slice(5).trim();
+                
+                if (data === '[DONE]') {
+                  continue;
+                }
+                
+                try {
+                  const parsed = JSON.parse(data);
+                  
+                  if (parsed.type === 'content_block_delta' && 
+                      parsed.delta && 
+                      parsed.delta.text) {
+                    const text = parsed.delta.text;
+                    contentText += text;
+                    
+                    // Update progress
+                    progress = Math.min(90, progress + progressIncrement);
+                    
+                    // Send content update
+                    socket.send(JSON.stringify({ 
+                      type: 'content', 
+                      progress,
+                      message: `Generated ${contentText.length} characters...`,
+                      content: contentText
+                    }));
+                    
+                    // Periodic quality checks
+                    updateCount++;
+                    if (updateCount % qualityCheckFrequency === 0 && !isQualityCheck) {
+                      isQualityCheck = true;
+                      
+                      // Run quality check in the background
+                      EdgeRuntime.waitUntil((async () => {
+                        try {
+                          // Simple analysis with a separate Claude call
+                          const qualityResponse = await fetch('https://api.anthropic.com/v1/messages', {
+                            method: 'POST',
+                            headers: {
+                              'Content-Type': 'application/json',
+                              'x-api-key': anthropicApiKey,
+                              'anthropic-version': '2023-06-01'
+                            },
+                            body: JSON.stringify({
+                              model: "claude-3-haiku-20240307", // Use faster model for quality checks
+                              max_tokens: 500,
+                              temperature: 0.2,
+                              messages: [
+                                {
+                                  role: "user",
+                                  content: `
+You are an educational content quality assessor. Analyze this partial educational content:
+
+${contentText.slice(0, 2000)}${contentText.length > 2000 ? '...' : ''}
 
 Provide a JSON response with these quality metrics (scores from 0-10):
-1. standards_alignment: How well the content aligns with typical educational standards
+1. standards_alignment: How well the content seems to align with educational standards
 2. reading_level: What reading level the content is appropriate for (score and level name)
-3. pedagogical_alignment: How well it supports effective teaching and learning
-4. accessibility: How accessible the content is for diverse learners
-5. cultural_sensitivity: How culturally inclusive and sensitive the content is
-6. strengths: List 3-5 strengths of the content
-7. weaknesses: List 3-5 areas for improvement
+3. pedagogical_approach: How well it supports effective teaching and learning
+4. accessibility: How accessible the content appears for diverse learners
+5. cultural_sensitivity: How culturally inclusive and sensitive the content seems
 
 Return ONLY valid JSON with no explanatory text.
-`;
-
-                const qualityResponse = await fetch('https://api.anthropic.com/v1/messages', {
-                  method: 'POST',
-                  headers: {
-                    'Content-Type': 'application/json',
-                    'x-api-key': anthropicApiKey,
-                    'anthropic-version': '2023-06-01'
-                  },
-                  body: JSON.stringify({
-                    model: "claude-3-haiku-20240307",
-                    max_tokens: 1000,
-                    temperature: 0.2,
-                    messages: [{ role: "user", content: qualityPrompt }]
-                  })
-                });
-        
-                if (qualityResponse.ok) {
-                  const qualityData = await qualityResponse.json();
-                  let qualityText = qualityData.content && qualityData.content.length > 0 
-                    ? qualityData.content[0].text : null;
-                  
-                  if (qualityText) {
-                    // Try to parse as JSON, but handle if it's wrapped in text
-                    try {
-                      // Extract JSON if it's in a code block format
-                      const jsonMatch = qualityText.match(/```json\n([\s\S]*?)\n```/) || 
-                                      qualityText.match(/```([\s\S]*?)```/);
-                      
-                      if (jsonMatch && jsonMatch[1]) {
-                        qualityText = jsonMatch[1];
-                      }
-                      
-                      const qualityMetrics = JSON.parse(qualityText);
-                      
-                      // Store the quality metrics with the content
-                      await supabase
-                        .from('content_items')
-                        .update({
-                          metadata: {
-                            ...contentData[0].metadata,
-                            quality_metrics: qualityMetrics
+`
+                                }
+                              ]
+                            })
+                          });
+                          
+                          if (qualityResponse.ok) {
+                            const qualityData = await qualityResponse.json();
+                            let qualityText = qualityData.content[0].text;
+                            
+                            try {
+                              // Extract JSON if it's in a code block format
+                              const jsonMatch = qualityText.match(/```json\n([\s\S]*?)\n```/) || 
+                                              qualityText.match(/```([\s\S]*?)```/);
+                              
+                              if (jsonMatch && jsonMatch[1]) {
+                                qualityText = jsonMatch[1];
+                              }
+                              
+                              const qualityMetrics = JSON.parse(qualityText);
+                              
+                              socket.send(JSON.stringify({
+                                type: 'quality',
+                                indicators: qualityMetrics
+                              }));
+                            } catch (e) {
+                              console.error('Error parsing quality metrics:', e);
+                            }
                           }
-                        })
-                        .eq('id', contentId);
-                        
-                      // Send final quality metrics
-                      socket.send(JSON.stringify({
-                        type: 'quality',
-                        indicators: qualityMetrics
-                      }));
-                    } catch (e) {
-                      console.error('Error parsing quality metrics:', e);
+                        } catch (e) {
+                          console.error('Error generating quality metrics:', e);
+                        } finally {
+                          isQualityCheck = false;
+                        }
+                      })());
                     }
                   }
+                } catch (e) {
+                  console.error('Error parsing chunk:', e);
                 }
-              } catch (qualityError) {
-                console.error('Error generating quality metrics:', qualityError);
-                // Non-blocking error
               }
             }
-            
-            socket.close();
-            
-          } catch (apiError) {
-            socket.send(JSON.stringify({
-              type: 'error',
-              message: `Error calling Claude API: ${apiError.message}`
-            }));
-            socket.close();
           }
-        }
-        // Handle cancellation
-        else if (message.type === 'cancel') {
-          isCancelled = true;
-          socket.send(JSON.stringify({
-            type: 'message',
-            message: 'Generation cancelled by user'
+
+          // Store the complete content in the database
+          await adminClient
+            .from('content_items')
+            .update({
+              content_text: contentText,
+              updated_at: new Date().toISOString()
+            })
+            .eq('id', contentId);
+            
+          // Send final update
+          socket.send(JSON.stringify({ 
+            type: 'content', 
+            progress: 100,
+            message: 'Content generation complete',
+            content: contentText,
+            contentId,
+            final: true
           }));
-          socket.close();
+          
+          console.log('Content generation complete');
+          
+        } catch (error) {
+          console.error('Error calling Claude API:', error);
+          socket.send(JSON.stringify({ 
+            type: 'error', 
+            message: `Error generating content: ${error.message}` 
+          }));
         }
+        
       } catch (error) {
-        socket.send(JSON.stringify({
-          type: 'error',
-          message: `Error processing message: ${error.message}`
+        console.error('Error processing WebSocket message:', error);
+        socket.send(JSON.stringify({ 
+          type: 'error', 
+          message: `Error: ${error.message}` 
         }));
       }
-    };
-
-    // Handle WebSocket errors
-    socket.onerror = (error) => {
-      console.error('WebSocket error:', error);
-    };
-
-    // Handle WebSocket closure
-    socket.onclose = () => {
-      console.log('WebSocket connection closed');
     };
 
     return response;
   } catch (error) {
     console.error('Error in content-generation-stream:', error);
-    
-    return new Response(
-      JSON.stringify({
-        success: false,
-        error: error.message,
-      }),
-      {
-        headers: { ...corsHeaders, 'Content-Type': 'application/json' },
-        status: 500,
-      }
-    );
+    return new Response(JSON.stringify({ error: error.message }), {
+      status: 500,
+      headers: { ...corsHeaders, 'Content-Type': 'application/json' }
+    });
   }
 });
