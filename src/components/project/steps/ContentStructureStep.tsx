@@ -1,4 +1,5 @@
-import React, { useState } from "react";
+
+import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
@@ -13,7 +14,6 @@ import {
   FormDescription,
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
-import { Textarea } from "@/components/ui/textarea";
 import {
   Select,
   SelectContent,
@@ -21,9 +21,10 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { X, Plus, GripVertical } from "lucide-react";
-import { Card, CardContent } from "@/components/ui/card";
 import { ProjectWizardFormData } from "@/types/project";
+import SectionAdder from "./content-structure/SectionAdder";
+import SectionsList from "./content-structure/SectionsList";
+import { useContentSections } from "@/hooks/useContentSections";
 
 const contentStructureSchema = z.object({
   organizationPattern: z.enum(['sequential', 'hierarchical', 'modular']),
@@ -36,12 +37,6 @@ const contentStructureSchema = z.object({
   ).min(1, "At least one content section is required"),
   estimatedDuration: z.string().min(1, "Estimated duration is required"),
 });
-
-type ContentSection = {
-  title: string;
-  description: string;
-  sequence: number;
-};
 
 type ContentStructureStepProps = {
   data: Partial<ProjectWizardFormData>;
@@ -72,70 +67,37 @@ const ContentStructureStep: React.FC<ContentStructureStepProps> = ({
   onNext, 
   onBack 
 }) => {
-  // Make sure to provide definitive values for all required properties
-  const [sections, setSections] = useState<ContentSection[]>(
-    data.contentSections?.map(section => ({
-      title: section.title || "Untitled Section", // Default value instead of empty string
-      description: section.description || "",
-      sequence: section.sequence || 0
-    })) || []
-  );
-  const [newSectionTitle, setNewSectionTitle] = useState("");
-  const [newSectionDescription, setNewSectionDescription] = useState("");
-
+  // Initialize form and default values
   const form = useForm<z.infer<typeof contentStructureSchema>>({
     resolver: zodResolver(contentStructureSchema),
     defaultValues: {
       organizationPattern: data.organizationPattern || 'sequential',
-      contentSections: sections,
+      contentSections: data.contentSections || [],
       estimatedDuration: data.estimatedDuration || "",
     },
   });
 
-  const addSection = () => {
-    if (!newSectionTitle.trim()) return;
-    
-    const newSection: ContentSection = {
-      title: newSectionTitle,
-      description: newSectionDescription,
-      sequence: sections.length + 1
-    };
-    
-    const updatedSections = [...sections, newSection];
-    setSections(updatedSections);
-    form.setValue("contentSections", updatedSections);
-    setNewSectionTitle("");
-    setNewSectionDescription("");
-  };
-
-  const removeSection = (index: number) => {
-    const updatedSections = sections.filter((_, i) => i !== index).map((section, idx) => ({
-      ...section,
-      sequence: idx + 1
-    }));
-    setSections(updatedSections);
-    form.setValue("contentSections", updatedSections);
-  };
-
-  const moveSection = (fromIndex: number, toIndex: number) => {
-    if (toIndex < 0 || toIndex >= sections.length) return;
-    
-    const updatedSections = [...sections];
-    const [removed] = updatedSections.splice(fromIndex, 1);
-    updatedSections.splice(toIndex, 0, removed);
-    
-    // Update sequence numbers
-    const reorderedSections = updatedSections.map((section, idx) => ({
-      ...section,
-      sequence: idx + 1
-    }));
-    
-    setSections(reorderedSections);
-    form.setValue("contentSections", reorderedSections);
-  };
+  // Initialize sections with defaults
+  const initialSections = data.contentSections?.map(section => ({
+    title: section.title || "Untitled Section",
+    description: section.description || "",
+    sequence: section.sequence || 0
+  })) || [];
+  
+  // Use our custom hook to manage sections state
+  const { 
+    sections, 
+    newSectionTitle, 
+    newSectionDescription, 
+    setNewSectionTitle, 
+    setNewSectionDescription, 
+    addSection, 
+    removeSection, 
+    moveSection 
+  } = useContentSections(initialSections, form);
 
   const handleSubmit = (values: z.infer<typeof contentStructureSchema>) => {
-    // Here we ensure that the contentSections match required structure when submitting
+    // Ensure that the contentSections match required structure when submitting
     const validSections = values.contentSections.map(section => ({
       title: section.title || "Untitled Section",
       description: section.description || "",
@@ -196,103 +158,19 @@ const ContentStructureStep: React.FC<ContentStructureStepProps> = ({
             Define the main sections or modules of your content
           </FormDescription>
           
-          <div className="space-y-3">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div className="md:col-span-2">
-                <Input
-                  value={newSectionTitle}
-                  onChange={(e) => setNewSectionTitle(e.target.value)}
-                  placeholder="Section title"
-                />
-              </div>
-              <div>
-                <Button
-                  type="button"
-                  onClick={addSection}
-                  variant="outline"
-                  className="w-full"
-                  disabled={!newSectionTitle.trim()}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Add Section
-                </Button>
-              </div>
-            </div>
-            
-            <Textarea
-              value={newSectionDescription}
-              onChange={(e) => setNewSectionDescription(e.target.value)}
-              placeholder="Section description (optional)"
-              className="min-h-[80px]"
-            />
-          </div>
+          <SectionAdder 
+            title={newSectionTitle}
+            description={newSectionDescription}
+            onTitleChange={setNewSectionTitle}
+            onDescriptionChange={setNewSectionDescription}
+            onAddSection={addSection}
+          />
 
-          <FormField
-            control={form.control}
-            name="contentSections"
-            render={() => (
-              <FormItem>
-                <div className="space-y-3">
-                  {sections.length === 0 ? (
-                    <p className="text-sm text-muted-foreground italic">No sections added yet</p>
-                  ) : (
-                    sections.map((section, index) => (
-                      <Card key={index} className="border border-gray-200">
-                        <CardContent className="p-4">
-                          <div className="flex items-start gap-2">
-                            <div className="flex items-center h-full py-2 cursor-move">
-                              <GripVertical className="w-4 h-4 text-gray-400" />
-                            </div>
-                            <div className="flex-1">
-                              <div className="flex justify-between">
-                                <h4 className="font-medium flex items-center">
-                                  <span className="inline-block bg-gray-100 text-gray-700 w-6 h-6 rounded-full text-xs flex items-center justify-center mr-2">
-                                    {section.sequence}
-                                  </span>
-                                  {section.title}
-                                </h4>
-                                <div className="flex gap-2">
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => moveSection(index, index - 1)}
-                                    disabled={index === 0}
-                                  >
-                                    ↑
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => moveSection(index, index + 1)}
-                                    disabled={index === sections.length - 1}
-                                  >
-                                    ↓
-                                  </Button>
-                                  <Button
-                                    type="button"
-                                    variant="ghost"
-                                    size="sm"
-                                    onClick={() => removeSection(index)}
-                                  >
-                                    <X className="w-4 h-4" />
-                                  </Button>
-                                </div>
-                              </div>
-                              {section.description && (
-                                <p className="text-sm text-gray-600 mt-1">{section.description}</p>
-                              )}
-                            </div>
-                          </div>
-                        </CardContent>
-                      </Card>
-                    ))
-                  )}
-                  <FormMessage />
-                </div>
-              </FormItem>
-            )}
+          <SectionsList 
+            sections={sections}
+            form={form}
+            onRemoveSection={removeSection}
+            onMoveSection={moveSection}
           />
         </div>
 
