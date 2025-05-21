@@ -88,6 +88,7 @@ const ProjectWizard: React.FC = () => {
   });
   const [isLoading, setIsLoading] = useState(false);
   const [isLoadingProject, setIsLoadingProject] = useState(!!projectId);
+  const [currentProject, setCurrentProject] = useState<any>(null); // Add state to store current project
 
   // Load existing project data if editing
   useEffect(() => {
@@ -97,6 +98,7 @@ const ProjectWizard: React.FC = () => {
       
       if (project) {
         setIsEditing(true);
+        setCurrentProject(project); // Store the current project
         
         // Extract config data from project
         const configData = project.config_dna || {};
@@ -198,7 +200,7 @@ const ProjectWizard: React.FC = () => {
           description: projectData.description,
           config_dna: projectData.configData,
           // If we're updating a project in the project_config stage, make sure to update completion percentage
-          ...(project?.pipeline_status === 'project_config' ? { completion_percentage: 20 } : {})
+          ...(currentProject?.pipeline_status === 'project_config' ? { completion_percentage: 20 } : {})
         });
 
         if (error) {
