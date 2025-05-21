@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -24,7 +23,7 @@ import {
 } from "@/components/ui/select";
 import { X, Plus, GripVertical } from "lucide-react";
 import { Card, CardContent } from "@/components/ui/card";
-import { ProjectWizardFormData } from "@/pages/ProjectWizard";
+import { ProjectWizardFormData } from "@/types/project";
 
 const contentStructureSchema = z.object({
   organizationPattern: z.enum(['sequential', 'hierarchical', 'modular']),

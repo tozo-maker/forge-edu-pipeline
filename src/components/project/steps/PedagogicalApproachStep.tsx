@@ -1,4 +1,3 @@
-
 import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,7 +14,7 @@ import {
 } from "@/components/ui/form";
 import { Textarea } from "@/components/ui/textarea";
 import { Badge } from "@/components/ui/badge";
-import { ProjectWizardFormData } from "@/pages/ProjectWizard";
+import { ProjectWizardFormData } from "@/types/project";
 
 const pedagogicalApproachSchema = z.object({
   teachingMethodology: z.array(z.string()).min(1, "Select at least one teaching methodology"),

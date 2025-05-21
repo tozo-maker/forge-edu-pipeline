@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -22,7 +21,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { X, Plus } from "lucide-react";
-import { ProjectWizardFormData } from "@/pages/ProjectWizard";
+import { ProjectWizardFormData } from "@/types/project";
 
 const objectiveSchema = z.object({
   text: z.string().min(3, "Objective text is required"),

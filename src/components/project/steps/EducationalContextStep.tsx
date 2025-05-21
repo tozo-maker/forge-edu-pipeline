@@ -1,4 +1,3 @@
-
 import React, { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -15,7 +14,7 @@ import {
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { X } from "lucide-react";
-import { ProjectWizardFormData } from "@/pages/ProjectWizard";
+import { ProjectWizardFormData } from "@/types/project";
 
 // Schema for the form
 const educationalContextSchema = z.object({

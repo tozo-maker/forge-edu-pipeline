@@ -1,4 +1,3 @@
-
 import React from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -21,7 +20,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { ProjectWizardFormData } from "@/pages/ProjectWizard";
+import { ProjectWizardFormData } from "@/types/project";
 
 const projectTypeFormSchema = z.object({
   title: z.string().min(3, {
