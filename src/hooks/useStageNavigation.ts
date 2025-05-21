@@ -101,6 +101,6 @@ export const useStageNavigation = () => {
     loading: projectsLoading,
     handleNextStage,
     handlePreviousStage,
-    isAIRelatedStage: currentStage === "content_generation" || currentStage === "validation"
+    isAIRelatedStage: currentStage === "content" || currentStage === "validation"
   };
 };
