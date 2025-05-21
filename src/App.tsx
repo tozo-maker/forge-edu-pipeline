@@ -26,6 +26,9 @@ import ClaudePromptsStage from "./components/pipeline/stages/ClaudePromptsStage"
 import ContentGenerationStage from "./components/pipeline/stages/ContentGenerationStage";
 import ValidationStage from "./components/pipeline/stages/ValidationStage";
 
+// New project creation dashboard
+import ProjectCreationPage from "./pages/ProjectCreationPage";
+
 const queryClient = new QueryClient();
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
@@ -58,6 +61,7 @@ const AppRoutes = () => {
       <Route path="/pipeline-intro" element={<ProtectedRoute><PipelineIntro /></ProtectedRoute>} />
       <Route path="/dashboard" element={<ProtectedRoute><Dashboard /></ProtectedRoute>} />
       <Route path="/projects" element={<ProtectedRoute><Projects /></ProtectedRoute>} />
+      <Route path="/projects/create" element={<ProtectedRoute><ProjectCreationPage /></ProtectedRoute>} />
       <Route path="/projects/new" element={<ProtectedRoute><ProjectWizard /></ProtectedRoute>} />
       
       {/* Project and pipeline stages routes */}

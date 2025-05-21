@@ -42,7 +42,7 @@ const CreateProjectCard: React.FC = () => {
         </div>
         
         <Button asChild className="w-full">
-          <Link to="/projects/new">
+          <Link to="/projects/create">
             Start Creating
             <ArrowRight className="ml-2 h-4 w-4" />
           </Link>
