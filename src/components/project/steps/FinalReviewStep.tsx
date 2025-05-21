@@ -1,80 +1,59 @@
 
-import React from "react";
+import React from 'react';
 import { Button } from "@/components/ui/button";
-import {
-  Card,
+import { Loader2 } from "lucide-react";
+import { ProjectWizardFormData } from '@/pages/ProjectWizard';
+import { 
+  Card, 
   CardContent,
   CardDescription,
   CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { ProjectWizardFormData } from "@/pages/ProjectWizard";
-import { Loader2 } from "lucide-react";
+  CardTitle 
+} from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
 
-type FinalReviewStepProps = {
+interface FinalReviewStepProps {
   data: Partial<ProjectWizardFormData>;
   onSubmit: () => void;
   onBack: () => void;
   isLoading: boolean;
-};
+  isEditing?: boolean;
+}
 
-const SectionItem = ({ label, value }: { label: string; value: any }) => (
-  <div className="mb-4">
-    <h4 className="text-sm font-medium text-gray-600">{label}</h4>
-    <div className="mt-1">
-      {typeof value === 'string' ? (
-        <p className="text-gray-900">{value || "Not specified"}</p>
-      ) : Array.isArray(value) ? (
-        <div className="flex flex-wrap gap-1">
-          {value.length > 0 ? (
-            value.map((item, i) => (
-              typeof item === 'string' ? (
-                <span key={i} className="bg-gray-100 text-gray-800 text-xs px-2 py-1 rounded">
-                  {item}
-                </span>
-              ) : null
-            ))
-          ) : (
-            <p className="text-gray-500">None specified</p>
-          )}
-        </div>
-      ) : (
-        <p className="text-gray-500">Not specified</p>
-      )}
-    </div>
-  </div>
-);
-
-const FinalReviewStep: React.FC<FinalReviewStepProps> = ({ 
-  data, 
-  onSubmit, 
+const FinalReviewStep: React.FC<FinalReviewStepProps> = ({
+  data,
+  onSubmit,
   onBack,
-  isLoading 
+  isLoading,
+  isEditing = false
 }) => {
   return (
     <div className="space-y-6">
-      <div className="space-y-2">
-        <h2 className="text-xl font-semibold text-gray-900">Review & Create</h2>
-        <p className="text-sm text-gray-500">
-          Review your project configuration before creating
+      <div>
+        <h2 className="text-xl font-semibold mb-4">Review Your Project Configuration</h2>
+        <p className="text-gray-600">
+          Please review your project configuration before {isEditing ? "saving changes" : "creating the project"}.
         </p>
       </div>
 
-      <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <Card>
           <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Project Information</CardTitle>
+            <CardTitle className="text-lg">Project Details</CardTitle>
           </CardHeader>
           <CardContent>
-            <SectionItem label="Project Title" value={data.title} />
-            <SectionItem label="Project Type" 
-              value={data.projectType === 'lesson_plan' ? 'Lesson Plan' : 
-                    data.projectType === 'course_module' ? 'Course Module' : 
-                    data.projectType === 'assessment' ? 'Assessment' :
-                    data.projectType === 'activity' ? 'Learning Activity' :
-                    data.projectType === 'curriculum' ? 'Full Curriculum' : ''} 
-            />
-            <SectionItem label="Description" value={data.description} />
+            <div className="space-y-2">
+              <div>
+                <span className="font-medium">Title:</span> {data.title}
+              </div>
+              <div>
+                <span className="font-medium">Type:</span> {data.projectType?.replace('_', ' ')}
+              </div>
+              <div>
+                <span className="font-medium">Description:</span>
+                <p className="text-sm text-gray-600">{data.description}</p>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -83,9 +62,24 @@ const FinalReviewStep: React.FC<FinalReviewStepProps> = ({
             <CardTitle className="text-lg">Educational Context</CardTitle>
           </CardHeader>
           <CardContent>
-            <SectionItem label="Grade Levels" value={data.gradeLevel} />
-            <SectionItem label="Subject Areas" value={data.subjectArea} />
-            <SectionItem label="Educational Standards" value={data.standards} />
+            <div className="space-y-2">
+              <div>
+                <span className="font-medium">Grade Levels:</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {data.gradeLevel?.map(grade => (
+                    <Badge key={grade} variant="outline">{grade}</Badge>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <span className="font-medium">Subject Areas:</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {data.subjectArea?.map(subject => (
+                    <Badge key={subject} variant="outline">{subject}</Badge>
+                  ))}
+                </div>
+              </div>
+            </div>
           </CardContent>
         </Card>
 
@@ -94,18 +88,14 @@ const FinalReviewStep: React.FC<FinalReviewStepProps> = ({
             <CardTitle className="text-lg">Learning Objectives</CardTitle>
           </CardHeader>
           <CardContent>
-            {data.objectives && data.objectives.length > 0 ? (
-              <div className="space-y-2">
-                {data.objectives.map((obj, index) => (
-                  <div key={index} className="border-b pb-2 last:border-b-0 last:pb-0">
-                    <p className="text-gray-900">{obj.text}</p>
-                    <p className="text-xs text-gray-600">Bloom's Level: {obj.bloomsLevel}</p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-gray-500">No learning objectives specified</p>
-            )}
+            <ul className="space-y-2 list-disc pl-5">
+              {data.objectives?.map((objective, index) => (
+                <li key={index}>
+                  {objective.text}
+                  <Badge className="ml-2">{objective.bloomsLevel}</Badge>
+                </li>
+              ))}
+            </ul>
           </CardContent>
         </Card>
 
@@ -114,76 +104,65 @@ const FinalReviewStep: React.FC<FinalReviewStepProps> = ({
             <CardTitle className="text-lg">Pedagogical Approach</CardTitle>
           </CardHeader>
           <CardContent>
-            <SectionItem label="Teaching Methodologies" value={data.teachingMethodology} />
-            <SectionItem label="Assessment Philosophy" value={data.assessmentPhilosophy} />
-            <SectionItem label="Differentiation Strategies" value={data.differentiationStrategies} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Cultural & Accessibility</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SectionItem label="Language Complexity" 
-              value={
-                data.languageComplexity === 'simple' ? 'Simple' :
-                data.languageComplexity === 'moderate' ? 'Moderate' :
-                data.languageComplexity === 'advanced' ? 'Advanced' : ''
-              } 
-            />
-            <SectionItem label="Cultural Inclusion Strategies" value={data.culturalInclusion} />
-            <SectionItem label="Accessibility Needs" value={data.accessibilityNeeds} />
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-lg">Content Structure</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <SectionItem label="Organization Pattern" 
-              value={
-                data.organizationPattern === 'sequential' ? 'Sequential' :
-                data.organizationPattern === 'hierarchical' ? 'Hierarchical' :
-                data.organizationPattern === 'modular' ? 'Modular' : ''
-              } 
-            />
-            <SectionItem label="Estimated Duration" value={data.estimatedDuration} />
-            
-            <h4 className="text-sm font-medium text-gray-600 mb-2">Content Sections</h4>
-            {data.contentSections && data.contentSections.length > 0 ? (
-              <div className="space-y-2">
-                {data.contentSections.map((section, index) => (
-                  <div key={index} className="bg-gray-50 p-2 rounded">
-                    <p className="font-medium">
-                      {section.sequence}. {section.title}
-                    </p>
-                    {section.description && (
-                      <p className="text-sm text-gray-600 mt-1">{section.description}</p>
-                    )}
-                  </div>
-                ))}
+            <div className="space-y-2">
+              <div>
+                <span className="font-medium">Teaching Methodologies:</span>
+                <div className="flex flex-wrap gap-1 mt-1">
+                  {data.teachingMethodology?.map(method => (
+                    <Badge key={method} variant="outline">{method}</Badge>
+                  ))}
+                </div>
               </div>
-            ) : (
-              <p className="text-gray-500">No content sections specified</p>
-            )}
+              <div>
+                <span className="font-medium">Assessment Philosophy:</span>
+                <p className="text-sm text-gray-600">{data.assessmentPhilosophy}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        <Card className="md:col-span-2">
+          <CardHeader className="pb-2">
+            <CardTitle className="text-lg">Additional Information</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <span className="font-medium">Language Complexity:</span> {data.languageComplexity}
+              </div>
+              <div>
+                <span className="font-medium">Organization Pattern:</span> {data.organizationPattern}
+              </div>
+              <div>
+                <span className="font-medium">Estimated Duration:</span> {data.estimatedDuration}
+              </div>
+              <div>
+                <span className="font-medium">Content Sections:</span> {data.contentSections?.length || 0}
+              </div>
+            </div>
           </CardContent>
         </Card>
       </div>
 
-      <div className="flex justify-between">
-        <Button type="button" variant="outline" onClick={onBack} disabled={isLoading}>
+      <div className="flex justify-between pt-4">
+        <Button
+          variant="outline"
+          onClick={onBack}
+          disabled={isLoading}
+        >
           Back
         </Button>
-        <Button type="button" onClick={onSubmit} disabled={isLoading}>
+        <Button
+          onClick={onSubmit}
+          disabled={isLoading}
+        >
           {isLoading ? (
             <>
               <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              Creating Project...
+              {isEditing ? "Saving..." : "Creating..."}
             </>
           ) : (
-            'Create Project'
+            isEditing ? "Save Changes" : "Create Project"
           )}
         </Button>
       </div>

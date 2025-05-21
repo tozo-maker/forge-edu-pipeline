@@ -40,7 +40,12 @@ const ProjectDetails: React.FC = () => {
   const handleContinue = () => {
     if (!project) return;
 
-    navigate(`/projects/${projectId}/${project.pipeline_status}`);
+    // Make sure we use the correct URL for project_config stage
+    if (project.pipeline_status === 'project_config') {
+      navigate(`/projects/${projectId}/project_config`);
+    } else {
+      navigate(`/projects/${projectId}/${project.pipeline_status}`);
+    }
   };
 
   if (loading || !project) {
